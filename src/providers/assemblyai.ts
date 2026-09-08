@@ -2,6 +2,30 @@ import type { AssemblyAiProviderConfig } from "../config/types";
 import { audioBlobFromPath, fetchJson, normalizeLanguage, objectAt, sleep, textAt } from "./helpers";
 import type { SttProvider } from "./types";
 
+/**
+ * Build the `speech_models` preference list for AssemblyAI.
+ *
+ * The singular `speech_model` parameter is deprecated: it still accepts the
+ * legacy `universal` alias (which the server resolves to universal-2) but
+ * rejects current model names such as `universal-3-5-pro` with HTTP 400
+ * (`speech_model is deprecated. Use "speech_models" instead`). Sending the
+ * array form is the only way to select a modern model. A single configured
+ * model gets universal-2 appended as the fallback tier, which is AssemblyAI's
+ * recommended routing; a comma-separated list is passed through as-is.
+ */
+export const buildSpeechModels = (model: string): string[] => {
+  const requested = model
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const mapped = (requested.length > 0 ? requested : ["universal"]).map((entry) =>
+    entry.toLowerCase() === "universal" ? "universal-2" : entry,
+  );
+  const primary = mapped[0] as string;
+  const withFallback = mapped.length === 1 && primary !== "universal-2" ? [primary, "universal-2"] : mapped;
+  return [...new Set(withFallback)];
+};
+
 const authHeaders = (apiKey: string): Record<string, string> => ({
   Accept: "application/json",
   Authorization: apiKey,
@@ -57,12 +81,17 @@ export const createAssemblyAiProvider = (config: AssemblyAiProviderConfig): SttP
     const audioUrl = textAt(uploadPayload, "upload_url");
     if (!audioUrl) throw new Error("AssemblyAI upload response did not include upload_url.");
 
-    const language = normalizeLanguage(input.language ?? config.language);
+    // "auto" is not a language code: it means "let the provider detect it".
+    // Send language_detection instead of silently falling back to the server
+    // default (en_us), otherwise the model preference list never routes.
+    const requestedLanguage = (input.language ?? config.language ?? "").trim();
+    const language = normalizeLanguage(requestedLanguage);
     const body: Record<string, unknown> = {
       audio_url: audioUrl,
-      speech_model: config.model,
+      speech_models: buildSpeechModels(config.model),
     };
     if (language) body.language_code = language;
+    else if (requestedLanguage.toLowerCase() === "auto") body.language_detection = true;
 
     const transcriptPayload = await fetchJson(
       config.transcriptEndpoint,
