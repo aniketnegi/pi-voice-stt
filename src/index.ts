@@ -5,6 +5,9 @@ import { loadConfig, readConfigFile } from "./config/load-config";
 import { resolveStartupOptions } from "./config/startup";
 import { DEFAULT_PROFILE, isKnownProfile, listProfileNames, resolveEffectiveProfile, writeProfileState } from "./config/profiles";
 import { createDictationController, type DictationToast } from "./core/dictation-controller";
+import { createRealtimeController } from "./core/realtime-controller";
+import { createFfmpegStreamer } from "./audio/stream-recorder";
+import { openAssemblyAiStream } from "./providers/assemblyai-stream";
 import { DEFAULT_MODE, isKnownMode, listModeNames } from "./core/modes";
 import { createProvider } from "./providers/factory";
 import { createCleanup } from "./cleanup/factory";
@@ -87,6 +90,23 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
     onError: reportError,
   });
 
+  const realtime = createRealtimeController({
+    strings,
+    loadConfig: getConfig,
+    createStreamer: (config) => createFfmpegStreamer(config.realtime.capture),
+    openStream: (config, events) => openAssemblyAiStream(config.realtime, events),
+    getEditorText: (ctx) => ctx.ui.getEditorText(),
+    setEditorText: (ctx, text) => ctx.ui.setEditorText(text),
+    appendPrompt: async (ctx, text) => {
+      const current = ctx.ui.getEditorText();
+      ctx.ui.setEditorText(`${current}${text}`);
+    },
+    notify,
+    onModeChange: (mode) => inputIndicator.setMode(mode),
+    onLive: (text) => inputIndicator.setLive(text),
+    onError: reportError,
+  });
+
   const switchProfile = async (ctx: ExtensionContext, next: string): Promise<void> => {
     if (controller.getMode() === "processing") {
       notify(ctx, { title: "Pi Voice STT", message: strings.profile.busy, variant: "warning" });
@@ -125,7 +145,7 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
   pi.registerCommand("stt", {
     description: "Voice dictation controls: start, stop, send, cancel, mode, profile, status, doctor.",
     getArgumentCompletions: (prefix) => {
-      const commands = ["start", "stop", "send", "cancel", "mode", "profile", "status", "doctor"];
+      const commands = ["start", "stop", "send", "cancel", "mode", "profile", "realtime", "status", "doctor"];
       return commands
         .filter((command) => command.startsWith(prefix.trim().toLowerCase()))
         .map((command) => ({ value: command, label: command }));
@@ -137,6 +157,10 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
       const param = rest.join(" ").trim();
 
       if (action === "start") {
+        if (realtime.isActive()) {
+          ctx.ui.notify("Pi Voice STT realtime session is active; finish or cancel it first.", "warning");
+          return;
+        }
         if (controller.getMode() === "idle") await controller.toggle(ctx).catch((error: unknown) => reportError(ctx, error));
         else ctx.ui.notify(`Pi Voice STT is already ${controller.getMode()}.`, "warning");
         return;
@@ -154,6 +178,28 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
 
       if (action === "cancel") {
         await controller.cancel(ctx).catch((error: unknown) => reportError(ctx, error));
+        return;
+      }
+
+      if (action === "realtime") {
+        const sub = param.toLowerCase();
+        if (!sub || sub === "status") {
+          ctx.ui.notify(`Pi Voice STT realtime: ${realtime.getMode()} · keybind ${startup.realtimeKeybind}`, "info");
+          return;
+        }
+        if (sub === "start") {
+          await realtime.start(ctx).catch((error: unknown) => reportError(ctx, error));
+          return;
+        }
+        if (sub === "stop" || sub === "send") {
+          await realtime.stop(ctx).catch((error: unknown) => reportError(ctx, error));
+          return;
+        }
+        if (sub === "cancel") {
+          await realtime.cancel(ctx).catch((error: unknown) => reportError(ctx, error));
+          return;
+        }
+        ctx.ui.notify("Usage: /stt realtime [start|stop|cancel|status]", "error");
         return;
       }
 
@@ -204,6 +250,17 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
             const ffmpeg = await pi.exec(config.capture.ffmpegPath, ["-version"], { timeout: 5000 });
             if (ffmpeg.code !== 0) throw new Error(`ffmpeg check failed: ${ffmpeg.stderr || ffmpeg.stdout}`);
           }
+          if (config.realtime.enabled) {
+            if (!config.realtime.apiKey) {
+              throw new Error("Realtime dictation is enabled but no AssemblyAI API key resolved (set realtime.apiKeyFile or realtime.apiKeyEnv).");
+            }
+            const streamFfmpeg = await pi.exec(config.realtime.capture.ffmpegPath, ["-version"], { timeout: 5000 });
+            if (streamFfmpeg.code !== 0) throw new Error(`Realtime ffmpeg check failed: ${streamFfmpeg.stderr || streamFfmpeg.stdout}`);
+            ctx.ui.notify(
+              `Pi Voice STT realtime ready (${config.realtime.model}/${config.realtime.mode}, ${config.realtime.capture.inputFormat}:${config.realtime.capture.input}).`,
+              "info",
+            );
+          }
           ctx.ui.notify(`Pi Voice STT ready (${config.capture.type}, ${config.provider.type}/${config.provider.model}).`, "info");
         } catch (error) {
           reportError(ctx, error);
@@ -230,6 +287,14 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
     },
   });
 
+  pi.registerShortcut(startup.realtimeKeybind as KeyId, {
+    description: "Pi Voice STT: start or finish realtime streaming dictation",
+    handler: async (ctx) => {
+      if (!ctx.hasUI) return;
+      await realtime.toggle(ctx).catch((error: unknown) => reportError(ctx, error));
+    },
+  });
+
   pi.on("session_start", (_event, ctx) => {
     if (!ctx.hasUI) return;
 
@@ -249,6 +314,18 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
       : undefined;
     if (unsubscribeTerminal) terminalInputCleanup.push(unsubscribeTerminal);
 
+    const realtimeKittyRegex = kittyCtrlShiftLetterRegex(startup.realtimeKeybind);
+    const unsubscribeRealtime = realtimeKittyRegex
+      ? ctx.ui.onTerminalInput((data) => {
+          if (realtimeKittyRegex.test(data)) {
+            void realtime.toggle(ctx).catch((error: unknown) => reportError(ctx, error));
+            return { consume: true };
+          }
+          return undefined;
+        })
+      : undefined;
+    if (unsubscribeRealtime) terminalInputCleanup.push(unsubscribeRealtime);
+
     const uiRecord = ctx.ui as unknown as Record<string, unknown> | undefined;
     const getEditorFn = typeof uiRecord?.getEditorComponent === "function" ? (uiRecord.getEditorComponent as () => unknown) : undefined;
     const previousEditor = getEditorFn ? getEditorFn() : undefined;
@@ -261,12 +338,18 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
       setEditorFn(createVoiceEditorFactory(previousFactory, {
         keybind,
         profileKeybind,
+        realtimeKeybind: startup.realtimeKeybind,
         ctx,
-        getMode: () => controller.getMode(),
+        getMode: () => (realtime.isActive() ? realtime.getMode() : controller.getMode()),
         renderLabel: (theme) => inputIndicator.renderLabel(theme),
+        renderLiveLine: (theme, width) => inputIndicator.renderLiveLine(theme, width),
         attachTui: (tui) => inputIndicator.attach(tui),
         onToggle: (handlerCtx) => {
           void (async () => {
+            if (realtime.isActive()) {
+              await realtime.stop(handlerCtx);
+              return;
+            }
             if (controller.getMode() === "idle") {
               await controller.toggle(handlerCtx);
               return;
@@ -279,13 +362,22 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
           })().catch((error: unknown) => reportError(handlerCtx, error));
         },
         onCancel: (handlerCtx) => {
-          void controller.cancel(handlerCtx).catch((error: unknown) => reportError(handlerCtx, error));
+          void (async () => {
+            if (realtime.isActive()) {
+              await realtime.cancel(handlerCtx);
+              return;
+            }
+            await controller.cancel(handlerCtx);
+          })().catch((error: unknown) => reportError(handlerCtx, error));
         },
         onSend: (handlerCtx) => {
           void controller.stopAndSubmit(handlerCtx).catch((error: unknown) => reportError(handlerCtx, error));
         },
         onShowProfileMenu: (handlerCtx) => {
           void showProfileMenu(handlerCtx).catch((error: unknown) => reportError(handlerCtx, error));
+        },
+        onRealtimeToggle: (handlerCtx) => {
+          void realtime.toggle(handlerCtx).catch((error: unknown) => reportError(handlerCtx, error));
         },
       }));
     } else {
@@ -296,6 +388,7 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     for (const unsubscribe of terminalInputCleanup) unsubscribe();
     terminalInputCleanup.length = 0;
+    await realtime.dispose();
     await controller.dispose();
     inputIndicator.dispose();
   });

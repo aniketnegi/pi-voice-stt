@@ -9,6 +9,7 @@ export type StartupOptions = {
   configPath: string;
   keybind: string;
   profileKeybind: string;
+  realtimeKeybind: string;
   locale: string;
   mode: string;
   profile: string;
@@ -30,6 +31,10 @@ export const resolveStartupOptions = (): StartupOptions => {
   const mode = textFrom(process.env.PI_STT_MODE, textFrom(config.mode, "default"));
   const profileKeybind = textFrom(process.env.PI_STT_PROFILE_KEYBIND, textFrom(config.profileKeybind, "alt+r"));
   const profile = textFrom(process.env.PI_STT_PROFILE, textFrom(config.profile, DEFAULT_PROFILE));
+  const realtimeKeybind = textFrom(
+    process.env.PI_STT_REALTIME_KEYBIND,
+    textFrom(objectFrom(config.realtime).keybind, "ctrl+shift+r"),
+  );
 
-  return { configPath, keybind, profileKeybind, locale, mode, profile };
+  return { configPath, keybind, profileKeybind, realtimeKeybind, locale, mode, profile };
 };

@@ -8,7 +8,14 @@ import { applyReplacements } from "./replacements";
 import { parseVoiceCommand } from "./voice-commands";
 import { formatTranscriptForPrompt } from "./output";
 
-export type DictationMode = "idle" | "recording" | "processing" | "polishing";
+export type DictationMode =
+  | "idle"
+  | "recording"
+  | "processing"
+  | "polishing"
+  | "connecting"
+  | "streaming"
+  | "stopping";
 
 export type DictationToast = {
   variant?: "info" | "success" | "warning" | "error";

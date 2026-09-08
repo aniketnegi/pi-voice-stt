@@ -16,6 +16,12 @@ export type Strings = {
     transcribingHint: string;
     polishing: string;
     polishingHint: string;
+    connecting: string;
+    connectingHint: string;
+    listening: string;
+    listeningHint: string;
+    finishing: string;
+    finishingHint: string;
   };
   /** Transient toast notifications. */
   toast: {
@@ -29,6 +35,12 @@ export type Strings = {
     transcriptionCancelled: string;
     cleanupFailed: string;
     cleared: string;
+    realtimeStarted: (keybind: string) => string;
+    realtimeStopped: string;
+    realtimeEmpty: string;
+    realtimeCancelled: string;
+    realtimeDisabled: string;
+    realtimeNeedsUi: string;
   };
   /** Profile switching menu and toasts. */
   profile: {
@@ -54,6 +66,12 @@ const en: Strings = {
     transcribingHint: "· esc cancel",
     polishing: "polishing",
     polishingHint: "· esc cancel",
+    connecting: "connecting",
+    connectingHint: "· esc cancel",
+    listening: "listening",
+    listeningHint: "· toggle to finish · esc cancel",
+    finishing: "finishing",
+    finishingHint: "· esc cancel",
   },
   toast: {
     stopping: "Stopping recording and transcribing…",
@@ -66,6 +84,12 @@ const en: Strings = {
     transcriptionCancelled: "Transcription cancelled.",
     cleanupFailed: "Cleanup failed; using the raw transcript.",
     cleared: "Transcript discarded.",
+    realtimeStarted: (keybind) => `Streaming… press ${keybind} to finish, or Esc to cancel.`,
+    realtimeStopped: "Realtime transcript inserted into the prompt.",
+    realtimeEmpty: "Realtime session produced no text.",
+    realtimeCancelled: "Realtime session cancelled.",
+    realtimeDisabled: "Realtime dictation is disabled. Set realtime.enabled to true in the STT config.",
+    realtimeNeedsUi: "Realtime dictation needs the interactive TUI.",
   },
   profile: {
     menuTitle: "Select STT profile",
@@ -88,6 +112,12 @@ const fr: Strings = {
     transcribingHint: "· esc annule",
     polishing: "nettoyage",
     polishingHint: "· esc annule",
+    connecting: "connexion",
+    connectingHint: "· esc annule",
+    listening: "écoute",
+    listeningHint: "· bascule pour terminer · esc annule",
+    finishing: "finalisation",
+    finishingHint: "· esc annule",
   },
   toast: {
     stopping: "Arrêt de l'enregistrement et transcription…",
@@ -100,6 +130,12 @@ const fr: Strings = {
     transcriptionCancelled: "Transcription annulée.",
     cleanupFailed: "Échec du nettoyage ; transcription brute utilisée.",
     cleared: "Transcription ignorée.",
+    realtimeStarted: (keybind) => `Diffusion… appuie sur ${keybind} pour terminer, ou Échap pour annuler.`,
+    realtimeStopped: "Transcription temps réel insérée dans le prompt.",
+    realtimeEmpty: "La session temps réel n'a produit aucun texte.",
+    realtimeCancelled: "Session temps réel annulée.",
+    realtimeDisabled: "La dictée temps réel est désactivée. Mets realtime.enabled à true dans la config STT.",
+    realtimeNeedsUi: "La dictée temps réel nécessite le TUI interactif.",
   },
   profile: {
     menuTitle: "Choisir le profil STT",

@@ -10,6 +10,7 @@ import type {
   MistralProviderConfig,
   OpenAiCompatibleProviderConfig,
   OutputConfig,
+  RealtimeConfig,
   VoiceCommandsConfig,
 } from "./types";
 
@@ -125,6 +126,31 @@ export const defaultAssemblyAiProviderConfig = {
   keychainService: "",
   keychainAccount: "",
 } satisfies AssemblyAiProviderConfig;
+
+export const defaultRealtimeConfig = {
+  enabled: false,
+  keybind: "ctrl+shift+r",
+  endpoint: "wss://streaming.assemblyai.com/v3/ws",
+  model: "universal-3-5-pro",
+  mode: "balanced",
+  formatTurns: true,
+  language: "auto",
+  keyterms: [],
+  inactivitySeconds: 0,
+  commitOnTurnEnd: true,
+  capture: {
+    ffmpegPath: "ffmpeg",
+    ...platformCaptureDefaults(),
+    sampleRate: 16000,
+    chunkMs: 100,
+    realtimeInput: false,
+  },
+  apiKey: "",
+  apiKeyEnv: "ASSEMBLYAI_API_KEY",
+  apiKeyFile: "",
+  keychainService: "",
+  keychainAccount: "",
+} satisfies RealtimeConfig;
 
 export const defaultOutputConfig = {
   appendTrailingSpace: true,

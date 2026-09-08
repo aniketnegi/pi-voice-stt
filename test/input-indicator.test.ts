@@ -17,13 +17,16 @@ test("voice editor wrapper proxies pi app-level handlers to the base editor", ()
   const factory = createVoiceEditorFactory(() => base, {
     keybind: "ctrl+r",
     profileKeybind: "alt+r",
+    realtimeKeybind: "ctrl+shift+r",
     ctx: { ui: { theme: {} } } as any,
     getMode: () => "idle",
     renderLabel: () => "voice ctrl+r",
+    renderLiveLine: () => undefined,
     onToggle: () => {},
     onCancel: () => {},
     onSend: () => {},
     onShowProfileMenu: () => {},
+    onRealtimeToggle: () => {},
     attachTui: () => {},
   });
 
@@ -76,13 +79,16 @@ test("voice editor wrapper opens the profile menu on the profile keybind", () =>
   const factory = createVoiceEditorFactory(() => base, {
     keybind: "ctrl+r",
     profileKeybind: "alt+r",
+    realtimeKeybind: "ctrl+shift+r",
     ctx: { ui: { theme: {} } } as any,
     getMode: () => "idle",
     renderLabel: () => "voice ctrl+r",
+    renderLiveLine: () => undefined,
     onToggle: () => { toggled = true; },
     onCancel: () => {},
     onSend: () => {},
     onShowProfileMenu: () => { menuOpened = true; },
+    onRealtimeToggle: () => {},
     attachTui: () => {},
   });
 
@@ -114,13 +120,16 @@ test("voice editor wrapper restores the default border color on idle instead of 
   const factory = createVoiceEditorFactory(() => base, {
     keybind: "ctrl+r",
     profileKeybind: "alt+r",
+    realtimeKeybind: "ctrl+shift+r",
     ctx: { ui: { theme: {} } } as any,
     getMode: () => "idle",
     renderLabel: () => "voice ctrl+r",
+    renderLiveLine: () => undefined,
     onToggle: () => {},
     onCancel: () => {},
     onSend: () => {},
     onShowProfileMenu: () => {},
+    onRealtimeToggle: () => {},
     attachTui: () => {},
   });
 
@@ -138,13 +147,16 @@ test("voice editor wrapper tints the border while recording and restores the def
   const factory = createVoiceEditorFactory(() => base, {
     keybind: "ctrl+r",
     profileKeybind: "alt+r",
+    realtimeKeybind: "ctrl+shift+r",
     ctx: { ui: { theme: {} } } as any,
     getMode: () => mode as any,
     renderLabel: () => "voice ctrl+r",
+    renderLiveLine: () => undefined,
     onToggle: () => {},
     onCancel: () => {},
     onSend: () => {},
     onShowProfileMenu: () => {},
+    onRealtimeToggle: () => {},
     attachTui: () => {},
   });
 
@@ -167,13 +179,16 @@ test("voice editor wrapper prefers the wrapper borderColor over the default on i
   const factory = createVoiceEditorFactory(() => base, {
     keybind: "ctrl+r",
     profileKeybind: "alt+r",
+    realtimeKeybind: "ctrl+shift+r",
     ctx: { ui: { theme: {} } } as any,
     getMode: () => "idle",
     renderLabel: () => "voice ctrl+r",
+    renderLiveLine: () => undefined,
     onToggle: () => {},
     onCancel: () => {},
     onSend: () => {},
     onShowProfileMenu: () => {},
+    onRealtimeToggle: () => {},
     attachTui: () => {},
   });
 

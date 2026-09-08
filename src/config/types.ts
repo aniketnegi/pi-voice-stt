@@ -130,12 +130,54 @@ export type CleanupConfig = SecretConfig & {
   timeoutSeconds: number;
 };
 
+/**
+ * Live streaming capture: raw PCM on ffmpeg's stdout instead of a wav file.
+ * Fields default to the `capture` block so the microphone is configured in one
+ * place; set `realtime.capture` to override per field. `realtimeInput` adds
+ * ffmpeg's `-re` flag, which reads a file input at wall-clock speed (used to
+ * test the streaming path without a live microphone).
+ */
+export type RealtimeCaptureConfig = {
+  ffmpegPath: string;
+  inputFormat: string;
+  input: string;
+  sampleRate: number;
+  /** Audio frame size sent to the streaming API. The API accepts 50-1000ms. */
+  chunkMs: number;
+  realtimeInput: boolean;
+};
+
+/**
+ * Realtime (streaming) dictation over AssemblyAI's v3 websocket. The provider
+ * is fixed because streaming protocols, auth and message shapes differ per
+ * vendor, and only AssemblyAI is implemented here. `commitOnTurnEnd` controls
+ * whether finalized turns are written into the editor as they arrive or
+ * buffered until the session stops. `language: "auto"` omits the language
+ * parameter and lets the model decide; any other value is sent as
+ * `language_codes`.
+ */
+export type RealtimeConfig = SecretConfig & {
+  enabled: boolean;
+  keybind: string;
+  endpoint: string;
+  model: string;
+  mode: string;
+  formatTurns: boolean;
+  language: string;
+  keyterms: string[];
+  /** Seconds of inactivity before the server closes the session. 0 disables. */
+  inactivitySeconds: number;
+  commitOnTurnEnd: boolean;
+  capture: RealtimeCaptureConfig;
+};
+
 export type PluginConfig = {
   capture: CaptureConfig;
   provider: ProviderConfig;
   output: OutputConfig;
   cleanup: CleanupConfig;
   commands: VoiceCommandsConfig;
+  realtime: RealtimeConfig;
 };
 
 /**

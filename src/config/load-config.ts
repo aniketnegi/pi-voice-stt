@@ -11,9 +11,10 @@ import {
   defaultMistralProviderConfig,
   defaultOpenAiCompatibleProviderConfig,
   defaultOutputConfig,
+  defaultRealtimeConfig,
   defaultVoiceCommandsConfig,
 } from "./defaults";
-import { secureEndpointFrom } from "./endpoint";
+import { secureEndpointFrom, secureWebSocketEndpointFrom } from "./endpoint";
 import type {
   AssemblyAiProviderConfig,
   BridgeCaptureConfig,
@@ -27,6 +28,7 @@ import type {
   OpenAiCompatibleProviderConfig,
   PluginConfig,
   ProviderConfig,
+  RealtimeConfig,
   VoiceCommandsConfig,
 } from "./types";
 import { resolveApiKey } from "../secrets/resolve-api-key";
@@ -279,13 +281,69 @@ const commandsFrom = (merged: Record<string, unknown>): VoiceCommandsConfig => {
   };
 };
 
+/**
+ * Realtime config. Capture defaults follow the resolved `capture` block so the
+ * microphone is configured in one place, and secrets inherit the resolved
+ * AssemblyAI provider when `realtime` does not define its own. That way a
+ * working batch setup (apiKeyFile, etc.) streams without duplicating the key.
+ */
+const realtimeFrom = async (
+  merged: Record<string, unknown>,
+  capture: CaptureConfig,
+  provider: ProviderConfig,
+): Promise<RealtimeConfig> => {
+  const realtime = objectFrom(merged.realtime);
+  const streamCapture = objectFrom(realtime.capture);
+  const captureFallback = capture.type === "ffmpeg" ? capture : undefined;
+  const inherited = provider.type === "assemblyai" ? provider : undefined;
+
+  const secrets = {
+    apiKey: realtime.apiKey ?? inherited?.apiKey,
+    apiKeyEnv: realtime.apiKeyEnv ?? inherited?.apiKeyEnv,
+    apiKeyFile: realtime.apiKeyFile ?? inherited?.apiKeyFile,
+    keychainService: realtime.keychainService ?? inherited?.keychainService,
+    keychainAccount: realtime.keychainAccount ?? inherited?.keychainAccount,
+  };
+  const apiKeyEnv = envNameFrom(secrets.apiKeyEnv, defaultRealtimeConfig.apiKeyEnv);
+  const inactivity = positiveIntegerFrom(realtime.inactivitySeconds, defaultRealtimeConfig.inactivitySeconds);
+
+  return {
+    enabled: booleanFrom(realtime.enabled, defaultRealtimeConfig.enabled),
+    keybind: textFrom(realtime.keybind, defaultRealtimeConfig.keybind),
+    endpoint: secureWebSocketEndpointFrom(realtime.endpoint, defaultRealtimeConfig.endpoint),
+    model: textFrom(realtime.model, defaultRealtimeConfig.model),
+    mode: textFrom(realtime.mode, defaultRealtimeConfig.mode),
+    formatTurns: booleanFrom(realtime.formatTurns, defaultRealtimeConfig.formatTurns),
+    language: textFrom(realtime.language, defaultRealtimeConfig.language),
+    keyterms: stringArrayFrom(realtime.keyterms, defaultRealtimeConfig.keyterms),
+    inactivitySeconds: inactivity === 0 ? 0 : Math.min(3600, Math.max(5, inactivity)),
+    commitOnTurnEnd: booleanFrom(realtime.commitOnTurnEnd, defaultRealtimeConfig.commitOnTurnEnd),
+    capture: {
+      ffmpegPath: textFrom(streamCapture.ffmpegPath, captureFallback?.ffmpegPath ?? defaultRealtimeConfig.capture.ffmpegPath),
+      inputFormat: textFrom(streamCapture.inputFormat, captureFallback?.inputFormat ?? defaultRealtimeConfig.capture.inputFormat),
+      input: textFrom(streamCapture.input, captureFallback?.input ?? defaultRealtimeConfig.capture.input),
+      sampleRate: positiveIntegerFrom(streamCapture.sampleRate, captureFallback?.sampleRate ?? defaultRealtimeConfig.capture.sampleRate),
+      chunkMs: Math.min(1000, Math.max(50, positiveIntegerFrom(streamCapture.chunkMs, defaultRealtimeConfig.capture.chunkMs))),
+      realtimeInput: booleanFrom(streamCapture.realtimeInput, defaultRealtimeConfig.capture.realtimeInput),
+    },
+    apiKey: await resolveApiKey(secrets, apiKeyEnv),
+    apiKeyEnv,
+    apiKeyFile: textFrom(secrets.apiKeyFile),
+    keychainService: textFrom(secrets.keychainService),
+    keychainAccount: textFrom(secrets.keychainAccount),
+  };
+};
+
 export const loadConfig = async (options: Record<string, unknown> = {}): Promise<PluginConfig> => {
   const merged = await mergedInput(options);
+  const capture = await captureFrom(merged);
+  const provider = await providerFrom(merged);
   return {
-    capture: await captureFrom(merged),
-    provider: await providerFrom(merged),
+    capture,
+    provider,
     output: outputFrom(merged),
     cleanup: await cleanupFrom(merged),
     commands: commandsFrom(merged),
+    realtime: await realtimeFrom(merged, capture, provider),
   };
 };

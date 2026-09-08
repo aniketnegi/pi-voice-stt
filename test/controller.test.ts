@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PluginConfig } from "../src/config/types";
 import { resolveStrings } from "../src/i18n/strings";
-import { defaultCleanupConfig, defaultVoiceCommandsConfig } from "../src/config/defaults";
+import { defaultCleanupConfig, defaultRealtimeConfig, defaultVoiceCommandsConfig } from "../src/config/defaults";
 import { createDictationController } from "../src/core/dictation-controller";
 
 const config: PluginConfig = {
@@ -32,6 +32,7 @@ const config: PluginConfig = {
   output: { appendTrailingSpace: true, submitOnStop: false, replacements: {} },
   cleanup: { ...defaultCleanupConfig },
   commands: { ...defaultVoiceCommandsConfig },
+  realtime: { ...defaultRealtimeConfig, capture: { ...defaultRealtimeConfig.capture } },
 };
 
 test("cancel during processing disposes the active recording handle", async () => {

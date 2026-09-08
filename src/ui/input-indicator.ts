@@ -15,13 +15,17 @@ import type { Strings } from "../i18n/strings";
 type VoiceEditorOptions = {
   keybind: string;
   profileKeybind: string;
+  realtimeKeybind: string;
   ctx: ExtensionContext;
   getMode(): DictationMode;
   renderLabel(theme: Theme): string;
+  /** In-flight streaming partial, rendered as a line above the prompt. */
+  renderLiveLine(theme: Theme, width: number): string | undefined;
   onToggle(ctx: ExtensionContext): void;
   onCancel(ctx: ExtensionContext): void;
   onSend(ctx: ExtensionContext): void;
   onShowProfileMenu(ctx: ExtensionContext): void;
+  onRealtimeToggle(ctx: ExtensionContext): void;
 };
 
 const injectRightLabel = (line: string, width: number, label: string): string => {
@@ -113,9 +117,9 @@ class VoiceEditorWrapper implements EditorComponent {
   private applyModeBorder(): void {
     const mode = this.options.getMode();
     const theme = this.options.ctx.ui.theme;
-    if (mode === "recording") this.base.borderColor = (str: string) => theme.fg("error", str);
-    else if (mode === "processing") this.base.borderColor = (str: string) => theme.fg("warning", str);
-    else if (mode === "polishing") this.base.borderColor = (str: string) => theme.fg("accent", str);
+    if (mode === "recording" || mode === "streaming") this.base.borderColor = (str: string) => theme.fg("error", str);
+    else if (mode === "processing" || mode === "stopping") this.base.borderColor = (str: string) => theme.fg("warning", str);
+    else if (mode === "polishing" || mode === "connecting") this.base.borderColor = (str: string) => theme.fg("accent", str);
     else this.base.borderColor = this.borderColor ?? this.defaultBorderColor;
   }
 
@@ -125,14 +129,24 @@ class VoiceEditorWrapper implements EditorComponent {
     const lines = this.base.render(width);
     if (lines.length === 0) return lines;
 
-    const label = this.options.renderLabel(this.options.ctx.ui.theme);
+    const theme = this.options.ctx.ui.theme;
+    const label = this.options.renderLabel(theme);
     lines[0] = injectRightLabel(lines[0] ?? "", width, label);
+    const live = this.options.renderLiveLine(theme, width);
+    if (live) lines.unshift(live);
     return lines;
   }
 
   handleInput(data: string): void {
     this.syncBase();
     const mode = this.options.getMode();
+
+    // Checked before the recording keybind so a mis-parsed ctrl+shift+<letter>
+    // can never fall through to the batch recorder.
+    if (matchesKey(data, this.options.realtimeKeybind as KeyId)) {
+      this.options.onRealtimeToggle(this.options.ctx);
+      return;
+    }
 
     if (matchesKey(data, this.options.keybind as KeyId)) {
       this.options.onToggle(this.options.ctx);
@@ -213,6 +227,7 @@ const PROCESSING_FRAMES = ["•  ", " • ", "  •", " • "];
 export const createInputIndicator = (keybind: string, strings: Strings) => {
   let mode: DictationMode = "idle";
   let activeProfile = "";
+  let live: string | undefined;
   let tui: TUI | undefined;
   let tick = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -254,6 +269,16 @@ export const createInputIndicator = (keybind: string, strings: Strings) => {
       activeProfile = nextProfile;
       requestRender();
     },
+    setLive(text: string | undefined) {
+      const next = text?.trim() ? text.trim() : undefined;
+      if (next === live) return;
+      live = next;
+      requestRender();
+    },
+    renderLiveLine(theme: Theme, width: number): string | undefined {
+      if (!live) return undefined;
+      return truncateToWidth(`${theme.fg("accent", "▏ ")}${theme.fg("dim", live)}`, Math.max(1, width), "…");
+    },
     renderLabel(theme: Theme): string {
       if (mode === "recording") {
         // Clear on/off blink in red so the recording state is obvious.
@@ -271,6 +296,21 @@ export const createInputIndicator = (keybind: string, strings: Strings) => {
         return `${theme.fg("accent", frame)} ${theme.fg("accent", strings.indicator.polishing)} ${theme.fg("dim", strings.indicator.polishingHint)}`;
       }
 
+      if (mode === "connecting") {
+        const frame = PROCESSING_FRAMES[tick % PROCESSING_FRAMES.length] ?? "…";
+        return `${theme.fg("accent", frame)} ${theme.fg("accent", strings.indicator.connecting)} ${theme.fg("dim", strings.indicator.connectingHint)}`;
+      }
+
+      if (mode === "streaming") {
+        const dot = tick % 2 === 0 ? "●" : "○";
+        return `${theme.fg("error", dot)} ${theme.fg("error", strings.indicator.listening)} ${theme.fg("dim", strings.indicator.listeningHint)}`;
+      }
+
+      if (mode === "stopping") {
+        const frame = PROCESSING_FRAMES[tick % PROCESSING_FRAMES.length] ?? "…";
+        return `${theme.fg("warning", frame)} ${theme.fg("warning", strings.indicator.finishing)} ${theme.fg("dim", strings.indicator.finishingHint)}`;
+      }
+
       const label = activeProfile && activeProfile !== DEFAULT_PROFILE ? `${strings.indicator.idle} · ${activeProfile}` : strings.indicator.idle;
       return `${theme.fg("dim", label)} ${theme.fg("accent", keybind)}`;
     },
@@ -279,6 +319,7 @@ export const createInputIndicator = (keybind: string, strings: Strings) => {
       tui = undefined;
       mode = "idle";
       activeProfile = "";
+      live = undefined;
     },
   };
 };
