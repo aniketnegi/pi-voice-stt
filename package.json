@@ -1,17 +1,17 @@
 {
   "name": "pi-voice-stt",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Provider-agnostic speech-to-text dictation extension for the Pi TUI.",
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cgarrot/pi-voice-stt.git"
+    "url": "git+https://github.com/cairodavila/pi-voice-stt.git"
   },
   "bugs": {
-    "url": "https://github.com/cgarrot/pi-voice-stt/issues"
+    "url": "https://github.com/cairodavila/pi-voice-stt/issues"
   },
-  "homepage": "https://github.com/cgarrot/pi-voice-stt#readme",
+  "homepage": "https://github.com/cairodavila/pi-voice-stt#readme",
   "keywords": [
     "pi-package",
     "pi-coding-agent",

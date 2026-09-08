@@ -14,6 +14,7 @@ This project is intentionally small and hackable: a Pi extension, local/bridge a
 - `Enter`-to-send and `Esc`-to-cancel while recording.
 - Pi-native animated input indicator, right-aligned in the prompt border (`voice ctrl+r`, `● recording`, `• transcribing`).
 - `ffmpeg` microphone capture to temporary WAV files.
+- Realtime streaming dictation over AssemblyAI's v3 websocket (`Ctrl+Shift+R`): partial transcripts appear while you speak and each finalized turn lands in the prompt.
 - Optional native Mac microphone bridge for local Pi sessions or Pi sessions running on a VPS over SSH.
 - Mistral Voxtral provider.
 - OpenAI / Groq / generic OpenAI-compatible provider for hosted and local Whisper-style endpoints.
@@ -35,21 +36,17 @@ This project is intentionally small and hackable: a Pi extension, local/bridge a
 ### From GitHub
 
 ```bash
-pi install npm:pi-voice-stt
+pi install git:github.com/cairodavila/pi-voice-stt
 ```
 
 Restart Pi or run `/reload`.
 
-GitHub install also works:
-
-```bash
-pi install git:github.com/cgarrot/pi-voice-stt
-```
+This fork is not published to npm; install it from Git.
 
 ### Local development install
 
 ```bash
-git clone https://github.com/cgarrot/pi-voice-stt.git
+git clone https://github.com/cairodavila/pi-voice-stt.git
 cd pi-voice-stt
 npm install
 npm run ci
@@ -176,7 +173,7 @@ Press the profile shortcut (default `Alt+R`) to open a menu and pick the profile
 PI_STT_PROFILE_KEYBIND=ctrl+shift+p pi
 ```
 
-> **Note on `Ctrl+Shift+R`:** the key parser bundled with Pi (pi-tui ≤ 0.80.x) misreads the Kitty keyboard-protocol modifier for `ctrl+shift+<letter>` as plain `ctrl+<letter>` (an upstream off-by-one), so `ctrl+shift+r` is indistinguishable from `ctrl+r` in most terminals. The extension therefore defaults to `Alt+R`, which is reliable everywhere. If you still want `Ctrl+Shift+R`, set `profileKeybind` to it: the extension matches the raw Kitty sequence, which works on terminals that forward the Kitty keyboard protocol (iTerm2, WezTerm, kitty) — inside tmux, also run `set -s extended-keys on`.
+> **Note on `Ctrl+Shift+R`:** Pi's key parser handles the Kitty keyboard-protocol encoding of `ctrl+shift+<letter>` correctly (modifier `6`, `1 + shift|ctrl`), so the combo works as an ordinary keybind on terminals that speak the protocol (kitty, Ghostty, WezTerm, iTerm2). Inside tmux, also run `set -s extended-keys on`. The extension additionally matches the raw CSI-u sequence as a fallback for terminals that forward the protocol without surfacing the key through the normal pipeline.
 
 The selection applies to the next recording. The last selected profile is persisted in a sidecar state file next to your config (`<config path>.profile.json`) and reused as the default for every session. Effective profile resolution: `PI_STT_PROFILE` environment variable > persisted selection > top-level `profile` key > `default` (no overrides).
 
@@ -186,6 +183,47 @@ Commands:
 - `/stt profile <name>` — switch profile directly.
 
 The active profile is shown in the input-border indicator while idle (`voice · local`). Like modes, profiles apply on top of the base config, and modes then apply on top of the selected profile.
+
+### Realtime streaming (AssemblyAI)
+
+Batch dictation records a file, uploads it and waits for the transcript. Realtime streams raw PCM over a websocket instead, so partial transcripts appear while you are still talking and each finalized turn is written into the prompt as it lands.
+
+```json
+{
+  "realtime": {
+    "enabled": true,
+    "keybind": "ctrl+shift+r",
+    "model": "universal-3-5-pro",
+    "mode": "balanced",
+    "formatTurns": true,
+    "language": "auto",
+    "keyterms": ["Pi", "AssemblyAI"],
+    "inactivitySeconds": 0,
+    "commitOnTurnEnd": true,
+    "capture": {
+      "inputFormat": "pulse",
+      "input": "default",
+      "chunkMs": 100
+    }
+  }
+}
+```
+
+- `enabled` — realtime is off until you turn it on. The provider is fixed to AssemblyAI: streaming protocols, auth and message shapes are vendor-specific, and only AssemblyAI is implemented.
+- `keybind` — defaults to `ctrl+shift+r` and toggles a session: press to start, press again to finish and insert. `PI_STT_REALTIME_KEYBIND` overrides it.
+- `model` / `mode` — sent to the streaming endpoint. `mode` accepts `balanced` or `min_latency`.
+- `formatTurns` — ask the server to punctuate and capitalize finalized turns.
+- `language` — `auto` omits the language parameter and lets the model decide; any other value is sent as `language_codes` (comma-separate several).
+- `keyterms` — words the model should prefer, sent as a JSON array. Useful for project names and jargon.
+- `inactivitySeconds` — seconds of silence before the server closes the session. `0` disables.
+- `commitOnTurnEnd` — `true` writes each finalized turn into the prompt as it arrives; `false` buffers everything until you stop.
+- `capture` — inherits the top-level `capture` block field by field, so the microphone is configured once. `chunkMs` is the audio frame size (50–1000 ms; `100` is a good default).
+
+Secrets inherit the resolved AssemblyAI `provider` block, so a working batch setup streams without duplicating the API key. Realtime needs the interactive TUI; there is no live text to render in a headless session.
+
+While a session is streaming the editor is rewritten as `existing text + finalized turns + the in-flight partial`. The moment you type, the extension stops touching the editor and hands it back, keeping the transcript to append when you stop.
+
+Commands: `/stt realtime [start|stop|cancel|status]`.
 
 ### Voice commands
 
@@ -238,7 +276,7 @@ If the cleanup call fails or times out, the raw transcript is used instead — d
 
 ### Language detection
 
-Set `provider.language` to a specific code (e.g. `"en"`, `"fr"`) to force a language, or to `"auto"` (or leave it empty) to let the provider detect the spoken language automatically — useful for code-switching (e.g. French with English technical terms). `"auto"` is treated as "no language hint" and is supported by every provider.
+Set `provider.language` to a specific code (e.g. `"en"`, `"fr"`) to force a language, or to `"auto"` (or leave it empty) to let the provider detect the spoken language automatically — useful for code-switching (e.g. French with English technical terms). `"auto"` is treated as "no language hint" and is supported by every provider. With AssemblyAI, `"auto"` sends `language_detection` instead of a fixed `language_code`, so the model preference list can route per request.
 
 ### Mistral Voxtral
 
@@ -356,13 +394,17 @@ You can also use `model: "whisper-1"` or any OpenAI transcription model supporte
 {
   "provider": {
     "type": "assemblyai",
-    "model": "universal",
+    "model": "universal-3-5-pro",
     "apiKeyEnv": "ASSEMBLYAI_API_KEY",
-    "language": "en",
+    "language": "auto",
     "pollIntervalMs": 1000
   }
 }
 ```
+
+`model` accepts any current AssemblyAI model name (`universal-3-5-pro`, `universal-2`, …) or a comma-separated preference list. The extension sends the plural `speech_models` array and appends `universal-2` as the fallback tier when you name a single model, which is AssemblyAI's recommended routing. The legacy `universal` alias is mapped to `universal-2`. The singular `speech_model` parameter is deprecated and rejects current model names with HTTP 400.
+
+With `language: "auto"` the provider sends `language_detection` rather than a fixed `language_code`, so the preference list routes per request. Note that detection works best with at least ~15 seconds of audio.
 
 ### Local STT server
 
@@ -495,6 +537,9 @@ The voice state is displayed inside the input area, right-aligned on the prompt 
 | `Ctrl+R` while recording | Stop, transcribe, insert transcript into the prompt (or send it directly when `output.submitOnStop` is `true`) |
 | `Enter` while recording | Stop, transcribe, insert transcript, send prompt to chat |
 | `Esc` while recording/processing | Cancel recording or transcription |
+| `Ctrl+Shift+R` while idle | Start a realtime streaming session |
+| `Ctrl+Shift+R` while streaming | Finish the session and insert the transcript |
+| `Esc` while streaming | Cancel the session and discard the transcript |
 | `/stt status` | Show current mode and config source |
 | `/stt doctor` | Check config, provider readiness, and local `ffmpeg` or bridge health |
 | `/stt start` | Start recording |
