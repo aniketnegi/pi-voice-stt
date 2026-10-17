@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Realtime streaming dictation over AssemblyAI's v3 websocket (`Ctrl+Shift+R`):
-  live partial transcripts, per-turn commits into the prompt, a raw-PCM `ffmpeg`
-  capture path, and `/stt realtime [start|stop|cancel|status]`.
+  a live preview, stable-word insertion at the cursor or prompt end, a raw-PCM
+  `ffmpeg` capture path, and `/stt realtime [start|stop|cancel|status]`.
+- Optional AssemblyAI speaker labels for recorded/file transcription and realtime
+  sessions, with a persisted `/stt speakers [off|N]` selection.
 
 ### Fixed
 
@@ -26,6 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   modifier `5` (plain ctrl) instead of `6` (ctrl+shift), so it never fired for the
   combo it was written for. `pi-tui` parses the sequence correctly, so the
   fallback is now only a raw-stream safety net.
+
+## [0.8.0] - 2026-09-23
+
+### Added
+
+- Add Soniox async STT provider (`SONIOX_API_KEY`, model `stt-async-v5`, via the
+  Files + Transcriptions API with bounded polling and best-effort cleanup). (#20,
+  @TomGrozev)
+- Local audio file transcription via `/stt file <path>` and the `transcribe_audio`
+  agent tool, using the active profile, mode, replacements and optional cleanup.
+  Files retain their original format, filename and MIME type. No conversion or
+  automatic chunking is performed; provider size and duration limits still apply.
+  (#21, @raguets)
+
+### Changed
+
+- Microphone and file transcription share the STT/cleanup pipeline and existing
+  processing/cancellation state. Voice commands remain microphone-only.
 
 ## [0.7.0] - 2026-09-07
 
@@ -138,7 +158,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `capture.input`, device listing (`pactl`/`arecord -L`), and the ALSA fallback.
   The README gains a dedicated capture-troubleshooting subsection. (#4)
 
-[Unreleased]: https://github.com/cgarrot/pi-voice-stt/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/cgarrot/pi-voice-stt/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/cgarrot/pi-voice-stt/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/cgarrot/pi-voice-stt/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/cgarrot/pi-voice-stt/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/cgarrot/pi-voice-stt/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/cgarrot/pi-voice-stt/compare/v0.4.1...v0.5.0

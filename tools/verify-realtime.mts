@@ -5,7 +5,7 @@
  * file (ffmpeg `-re` paces it at wall-clock speed) with a fake
  * ExtensionContext, so frame chunking, turn handling, live editor writes and
  * the auto-stop on capture exit are all exercised without a TUI or a
- * microphone. Requires a resolved AssemblyAI key.
+ * microphone. Requires ASSEMBLYAI_API_KEY.
  *
  * Usage: npx tsx tools/verify-realtime.mts [path-to-wav] [language]
  */
@@ -31,7 +31,7 @@ writeFileSync(
         type: "assemblyai",
         model: "universal-3-5-pro",
         language: "auto",
-        apiKeyFile: "~/.pi/agent/secrets/assemblyai.key",
+        apiKeyEnv: "ASSEMBLYAI_API_KEY",
       },
       capture: { type: "ffmpeg", inputFormat: "pulse", input: "default" },
       realtime: {
@@ -65,30 +65,32 @@ const controller = createRealtimeController({
   strings: resolveStrings("en"),
   loadConfig: async () => config,
   createStreamer: (loaded) => createFfmpegStreamer(loaded.realtime.capture),
-  openStream: (loaded, events) =>
+  openStream: (loaded, events, signal) =>
     openAssemblyAiStream(loaded.realtime, {
       ...events,
       onReady: (info) => console.log(`  [ready] ${info.model}/${info.mode} id=${info.id}`),
-      onPartial: (text) => {
+      onPartial: (text, turnOrder, stableText) => {
         partials.push(text);
         console.log(`  [partial] ${text}`);
-        events.onPartial?.(text);
+        events.onPartial?.(text, turnOrder, stableText);
       },
-      onFinal: (text) => {
+      onFinal: (text, turnOrder, speaker) => {
         finals.push(text);
         console.log(`  [final  ] ${text}`);
-        events.onFinal?.(text);
+        events.onFinal?.(text, turnOrder, speaker);
       },
-      onClosed: (info) =>
+      onClosed: (info) => {
         console.log(
           `  [closed] ${info ? `${info.audioSeconds}s audio / ${info.sessionSeconds}s session` : "no Termination received"}`,
-        ),
-    }),
+        );
+        events.onClosed?.(info);
+      },
+    }, signal),
   getEditorText: () => editorText,
   setEditorText: (_ctx, text) => {
     editorText = text;
   },
-  appendPrompt: async (_ctx, text) => {
+  insertPrompt: (_ctx, text) => {
     editorText += text;
   },
   notify: (_ctx, toast) => console.log(`  [toast ${toast.variant ?? "info"}] ${toast.message}`),
@@ -96,6 +98,7 @@ const controller = createRealtimeController({
   onError: (_ctx, error) => console.log("  [ERROR]", error instanceof Error ? error.message : String(error)),
 });
 
+// SAFETY: The controller only reads hasUI; this harness supplies editor and notification callbacks.
 const ctx = { hasUI: true, ui: {} } as unknown as ExtensionContext;
 
 console.log("--- streaming ---");

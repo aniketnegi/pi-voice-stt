@@ -2,7 +2,7 @@
 
 ![Pi Voice STT preview](https://raw.githubusercontent.com/cgarrot/pi-voice-stt/main/assets/preview.gif)
 
-Provider-agnostic speech-to-text dictation for the [Pi coding agent](https://github.com/earendil-works/pi-coding-agent) TUI.
+Provider-agnostic speech-to-text for the [Pi coding agent](https://github.com/earendil-works/pi-coding-agent), with interactive voice dictation and audio file transcription.
 
 Press `Ctrl+R` to record your microphone, press it again to transcribe and insert the transcript into the active prompt, press `Enter` while recording to transcribe and send it directly to chat, or press `Esc` to cancel recording/transcription.
 
@@ -11,14 +11,16 @@ This project is intentionally small and hackable: a Pi extension, local/bridge a
 ## Features
 
 - Pi TUI extension with `/stt` command and `Ctrl+R` shortcut.
+- Local audio file transcription with `/stt file <path>` and the `transcribe_audio` agent tool.
 - `Enter`-to-send and `Esc`-to-cancel while recording.
 - Pi-native animated input indicator, right-aligned in the prompt border (`voice ctrl+r`, `● recording`, `• transcribing`).
 - `ffmpeg` microphone capture to temporary WAV files.
-- Realtime streaming dictation over AssemblyAI's v3 websocket (`Ctrl+Shift+R`): partial transcripts appear while you speak and each finalized turn lands in the prompt.
+- Realtime streaming dictation over AssemblyAI's v3 websocket (`Ctrl+Shift+R`), with a live preview and stable words inserted into the prompt.
+- Optional AssemblyAI speaker labels for recorded audio and realtime sessions.
 - Optional native Mac microphone bridge for local Pi sessions or Pi sessions running on a VPS over SSH.
 - Mistral Voxtral provider.
 - OpenAI / Groq / generic OpenAI-compatible provider for hosted and local Whisper-style endpoints.
-- Native provider integrations for Deepgram, ElevenLabs Scribe, Gladia, and AssemblyAI.
+- Native provider integrations for Deepgram, ElevenLabs Scribe, Gladia, AssemblyAI, and Soniox.
 - Environment variable and macOS Keychain secret lookup.
 - HTTPS-by-default endpoint policy; plain HTTP is allowed only for loopback hosts.
 - TypeScript source loaded directly by Pi; no build step required for runtime.
@@ -27,26 +29,30 @@ This project is intentionally small and hackable: a Pi extension, local/bridge a
 
 - Pi `>= 0.75`.
 - Node.js `>= 20` when developing locally.
-- `ffmpeg` available in `PATH` or configured with `capture.ffmpegPath`.
-- Microphone permission for the terminal app running Pi, or for the Mac bridge daemon when using `capture.type: "bridge"`.
-- A transcription backend (Mistral, OpenAI/Groq, Deepgram, ElevenLabs, Gladia, AssemblyAI, or a local OpenAI-compatible server).
+- For microphone capture: `ffmpeg` available in `PATH` or configured with `capture.ffmpegPath` (or the Mac bridge).
+- For microphone capture: microphone permission for the terminal app running Pi, or for the Mac bridge daemon when using `capture.type: "bridge"`.
+- A transcription backend (Mistral, OpenAI/Groq, Deepgram, ElevenLabs Scribe, Gladia, AssemblyAI, Soniox, or a local OpenAI-compatible server).
 
 ## Installation
 
 ### From GitHub
 
 ```bash
-pi install git:github.com/cairodavila/pi-voice-stt
+pi install npm:pi-voice-stt
 ```
 
 Restart Pi or run `/reload`.
 
-This fork is not published to npm; install it from Git.
+GitHub install also works:
+
+```bash
+pi install git:github.com/cgarrot/pi-voice-stt
+```
 
 ### Local development install
 
 ```bash
-git clone https://github.com/cairodavila/pi-voice-stt.git
+git clone https://github.com/cgarrot/pi-voice-stt.git
 cd pi-voice-stt
 npm install
 npm run ci
@@ -58,6 +64,33 @@ You can also add the local path to Pi settings:
 ```bash
 pi install /absolute/path/to/pi-voice-stt
 ```
+
+## Audio file transcription
+
+Insert a local recording's transcript into the current prompt:
+
+```text
+/stt file ./meeting.m4a
+/stt file "./My recordings/meeting.wav"
+```
+
+The command appends to the editor using the existing output formatting and never sends the prompt automatically, even when `output.submitOnStop` is enabled. Spoken keywords such as `send`, `clear` and `new line` are treated as transcript content, not voice commands.
+
+An agent can use the `transcribe_audio` tool:
+
+```text
+Transcribe ./meeting.m4a and summarize the decisions and action items.
+```
+
+The tool accepts `{ "path": "./meeting.m4a" }` and returns the transcript as its main text, with `text`, `provider`, `model` and the resolved `path` in its result details. It does not change the editor or write a transcript file.
+
+Both entry points use the active profile and mode, including the provider, language, replacements and optional AI cleanup. Use `/stt mode raw` to skip cleanup. Relative paths resolve from the Pi session's working directory; absolute paths and a leading `@` are also accepted. Only readable local files are supported; URLs are not downloaded. Source files are never modified. File transcription does not require a microphone, `ffmpeg`, or the capture bridge.
+
+Supported file extensions: `.wav`, `.mp3`, `.m4a`, `.mp4`, `.aac`, `.flac`, `.ogg`, `.opus` and `.webm`. The original file is uploaded with its filename and matching MIME type, without conversion to WAV. Actual codec/container support depends on the selected provider, model and endpoint, especially for custom OpenAI-compatible servers. `.opus` is sent as an Ogg Opus container (`audio/ogg`). AssemblyAI retains its binary upload endpoint's `application/octet-stream` header.
+
+Audio files are currently sent as a single transcription request. Automatic chunking of long recordings is not implemented yet. Provider upload size and duration limits therefore still apply. A provider rejection includes the provider, file path, file size and the returned error; the extension does not silently retry with another format or provider. Gladia and AssemblyAI retain their existing upload, transcription-job and polling flow for that single file.
+
+The existing provider and cleanup timeouts apply. Cancel with `/stt cancel` or `Esc` in the interactive editor; tool cancellation also aborts the request. Failed or cancelled file transcription leaves the editor unchanged. Only one recording or transcription can run at a time.
 
 ## Configuration
 
@@ -186,7 +219,7 @@ The active profile is shown in the input-border indicator while idle (`voice · 
 
 ### Realtime streaming (AssemblyAI)
 
-Batch dictation records a file, uploads it and waits for the transcript. Realtime streams raw PCM over a websocket instead, so partial transcripts appear while you are still talking and each finalized turn is written into the prompt as it lands.
+Batch dictation records a file, uploads it and waits for the transcript. Realtime streams raw PCM over a websocket instead: unstable words appear in a live preview, while stable words are inserted into the prompt without rewriting text you have already edited.
 
 ```json
 {
@@ -200,6 +233,7 @@ Batch dictation records a file, uploads it and waits for the transcript. Realtim
     "keyterms": ["Pi", "AssemblyAI"],
     "inactivitySeconds": 0,
     "commitOnTurnEnd": true,
+    "insertionPosition": "cursor",
     "capture": {
       "inputFormat": "pulse",
       "input": "default",
@@ -215,15 +249,22 @@ Batch dictation records a file, uploads it and waits for the transcript. Realtim
 - `formatTurns` — ask the server to punctuate and capitalize finalized turns.
 - `language` — `auto` omits the language parameter and lets the model decide; any other value is sent as `language_codes` (comma-separate several).
 - `keyterms` — words the model should prefer, sent as a JSON array. Useful for project names and jargon.
-- `inactivitySeconds` — seconds of silence before the server closes the session. `0` disables.
-- `commitOnTurnEnd` — `true` writes each finalized turn into the prompt as it arrives; `false` buffers everything until you stop.
+- `inactivitySeconds` — server-side inactivity timeout in seconds. `0` disables that timeout; the client still stops after 30 seconds without detected speech.
+- `commitOnTurnEnd` — `true` inserts stable words as they arrive (or whole turns when speaker labels are enabled); `false` buffers everything until you stop.
+- `insertionPosition` — `cursor` (default) inserts at the current cursor; `end` appends to the prompt.
 - `capture` — inherits the top-level `capture` block field by field, so the microphone is configured once. `chunkMs` is the audio frame size (50–1000 ms; `100` is a good default).
 
 Secrets inherit the resolved AssemblyAI `provider` block, so a working batch setup streams without duplicating the API key. Realtime needs the interactive TUI; there is no live text to render in a headless session.
 
-While a session is streaming the editor is rewritten as `existing text + finalized turns + the in-flight partial`. The moment you type, the extension stops touching the editor and hands it back, keeping the transcript to append when you stop.
+Already inserted words are not rewritten by later provider revisions. You can keep typing while streaming. Cancelling restores the original prompt only if it has not been edited since dictation started; otherwise it preserves your edits and any words already inserted. File transcription and realtime sessions cannot run together.
 
 Commands: `/stt realtime [start|stop|cancel|status]`.
+
+### Speaker labels (AssemblyAI)
+
+Set a top-level `"speakers": 2` to request labels for up to two speakers, or use `/stt speakers` to open a picker. `/stt speakers off` disables labels; `/stt speakers N` accepts 1–10. The runtime choice is saved alongside the selected profile and overrides the config until changed. The default is `0` (off).
+
+Recorded/file transcription adds `Speaker A: …` lines only when multiple speakers were detected. Realtime waits for finalized turns when two or more speakers are configured, since speaker labels arrive at turn end, and adds a label when the speaker changes. Later provider revisions do not rewrite text already inserted. Other batch providers ignore this setting.
 
 ### Voice commands
 
@@ -406,6 +447,23 @@ You can also use `model: "whisper-1"` or any OpenAI transcription model supporte
 
 With `language: "auto"` the provider sends `language_detection` rather than a fixed `language_code`, so the preference list routes per request. Note that detection works best with at least ~15 seconds of audio.
 
+### Soniox
+
+```json
+{
+  "provider": {
+    "type": "soniox",
+    "model": "stt-async-v5",
+    "apiKeyEnv": "SONIOX_API_KEY",
+    "language": "en"
+  }
+}
+```
+
+Get an API key at [console.soniox.com](https://console.soniox.com). Supports `baseUrl` (default `https://api.soniox.com`), `model` (default `stt-async-v5`), `language` (maps to `language_hints`; empty or `"auto"` for auto-detection), `timeoutSeconds` (default `300`), and `pollIntervalMs` (default `1000`).
+
+A ready-to-copy config is provided in [`examples/soniox.json`](examples/soniox.json).
+
 ### Local STT server
 
 ```json
@@ -539,14 +597,17 @@ The voice state is displayed inside the input area, right-aligned on the prompt 
 | `Esc` while recording/processing | Cancel recording or transcription |
 | `Ctrl+Shift+R` while idle | Start a realtime streaming session |
 | `Ctrl+Shift+R` while streaming | Finish the session and insert the transcript |
-| `Esc` while streaming | Cancel the session and discard the transcript |
+| `Esc` while streaming | Cancel the session; restore the original prompt only if it has not been edited |
 | `/stt status` | Show current mode and config source |
 | `/stt doctor` | Check config, provider readiness, and local `ffmpeg` or bridge health |
 | `/stt start` | Start recording |
 | `/stt stop` | Stop and insert transcript |
 | `/stt send` | Stop and send to chat |
+| `/stt file <path>` | Transcribe a local audio file and append it to the editor |
 | `/stt cancel` | Cancel active recording/transcription |
 | `/stt mode [name]` | Show or switch the active preset (`default`, `raw`, or your own) |
+| `/stt realtime [start\|stop\|cancel\|status]` | Control AssemblyAI realtime streaming |
+| `/stt speakers [off\|N]` | Pick or set the maximum AssemblyAI speaker count |
 
 ## Secret handling
 
@@ -559,6 +620,7 @@ export GROQ_API_KEY=...
 export DEEPGRAM_API_KEY=...
 export ELEVENLABS_API_KEY=...
 export GLADIA_API_KEY=...
+export SONIOX_API_KEY=...
 export ASSEMBLYAI_API_KEY=...
 ```
 
@@ -622,6 +684,16 @@ tools/                       optional Mac bridge daemon/installer
 - Avoid storing secrets in sessions or config examples.
 - Use only Node built-ins at runtime.
 - Fail safely: clean up temporary files and stop local or bridged `ffmpeg` on cancel, reload, or exit.
+
+## Contributors
+
+Thanks to everyone who has contributed to Pi Voice STT:
+
+<a href="https://github.com/cgarrot/pi-voice-stt/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=cgarrot/pi-voice-stt" alt="Pi Voice STT contributors" />
+</a>
+
+Made with [contrib.rocks](https://contrib.rocks). Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

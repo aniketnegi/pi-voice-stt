@@ -76,7 +76,7 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
   let activeProfile = startup.profile;
   // Runtime `/stt speakers` choice; undefined = use the config's `speakers` key.
   let activeSpeakers: number | undefined;
-  void readSpeakersState(startup.configPath)
+  const speakersReady = readSpeakersState(startup.configPath)
     .then((value) => {
       if (activeSpeakers === undefined) activeSpeakers = value;
     })
@@ -85,7 +85,7 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
 
   // Apply the persisted last-selection (sidecar state) once loaded; env and
   // the config `profile` key are already folded into startup.profile.
-  void (async () => {
+  const profileReady = (async () => {
     const fileConfig = await readConfigFile(startup.configPath).catch(
       () => ({}),
     );
@@ -105,13 +105,15 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
     }
   })().catch(() => {});
 
-  const getConfig = () =>
-    loadConfig({
+  const getConfig = async () => {
+    await Promise.all([profileReady, speakersReady]);
+    return loadConfig({
       configPath: startup.configPath,
       mode: activeMode,
       profile: activeProfile,
       speakers: activeSpeakers,
     });
+  };
 
   const speakersLabel = (value: number) => (value > 0 ? `up to ${value}` : "off");
 
@@ -156,7 +158,11 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
 
   const realtime = createRealtimeController({
     strings,
-    loadConfig: getConfig,
+    loadConfig: async () => {
+      if (controller.getMode() !== "idle")
+        throw new Error("Pi Voice STT is busy. Stop or cancel the current recording/transcription first.");
+      return getConfig();
+    },
     createStreamer: (config) => createFfmpegStreamer(config.realtime.capture),
     openStream: (config, events, signal) =>
       openAssemblyAiStream(config.realtime, events, signal),
@@ -168,7 +174,8 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
       else ctx.ui.pasteToEditor(text);
     },
     notify,
-    onModeChange: (mode) => inputIndicator.setMode(mode),
+    onModeChange: (mode) =>
+      inputIndicator.setMode(mode === "idle" ? controller.getMode() : mode),
     onLive: (text) => inputIndicator.setLive(text),
     onError: reportError,
   });
@@ -177,6 +184,7 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
     ctx: ExtensionContext,
     next: string,
   ): Promise<void> => {
+    await profileReady;
     if (controller.getMode() === "processing") {
       notify(ctx, {
         title: "Pi Voice STT",
@@ -239,14 +247,35 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
     await switchProfile(ctx, next);
   };
 
+  pi.registerTool({
+    name: "transcribe_audio",
+    label: "Transcribe Audio",
+    description: "Transcribe a local audio file using the configured Pi Voice STT provider.",
+    promptSnippet: "Transcribe a local audio file with the active STT profile and mode.",
+    // Pi accepts JSON Schema directly; no additional runtime dependency is needed.
+    parameters: {
+      type: "object",
+      properties: { path: { type: "string", minLength: 1, description: "Local audio file path, relative to the session working directory or absolute." } },
+      required: ["path"],
+      additionalProperties: false,
+    } as const,
+    async execute(_toolCallId, { path }, signal, _onUpdate, ctx) {
+      if (realtime.isActive())
+        throw new Error("Pi Voice STT realtime session is active; finish or cancel it first.");
+      const result = await controller.transcribeFile(ctx, path, { signal: signal ?? ctx.signal });
+      return { content: [{ type: "text", text: result.text }], details: result };
+    },
+  });
+
   pi.registerCommand("stt", {
     description:
-      "Voice dictation controls: start, stop, send, cancel, mode, profile, speakers, status, doctor.",
+      "Speech-to-text controls: start, stop, send, file <path>, cancel, mode, profile, speakers, realtime, status, doctor.",
     getArgumentCompletions: (prefix) => {
       const commands = [
         "start",
         "stop",
         "send",
+        "file",
         "cancel",
         "mode",
         "profile",
@@ -261,9 +290,25 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
     },
     handler: async (args, ctx) => {
       const trimmed = args.trim();
-      const [first, ...rest] = trimmed.split(/\s+/);
+      const first = trimmed.split(/\s+/, 1)[0] ?? "";
       const action = (first || "status").toLowerCase();
-      const param = rest.join(" ").trim();
+      const param = trimmed.slice(first.length).trim();
+
+      if (action === "file") {
+        try {
+          if (realtime.isActive())
+            throw new Error("Pi Voice STT realtime session is active; finish or cancel it first.");
+          if (!param) throw new Error("Usage: /stt file <path>");
+          if ((param.startsWith('"') || param.startsWith("'")) && (param.length < 2 || !param.endsWith(param[0]!))) {
+            throw new Error("Unclosed quote in audio file path.");
+          }
+          const path = param.replace(/^(["'])(.*)\1$/s, "$2");
+          await controller.transcribeFile(ctx, path, { signal: ctx.signal, insertIntoPrompt: true });
+        } catch (error) {
+          reportError(ctx, error);
+        }
+        return;
+      }
 
       if (action === "start") {
         if (realtime.isActive()) {
@@ -460,7 +505,7 @@ export default function piVoiceSttExtension(pi: ExtensionAPI) {
 
       if (action !== "status") {
         ctx.ui.notify(
-          "Usage: /stt [start|stop|send|cancel|mode <name>|profile <name>|speakers [off|N]|status|doctor]",
+          "Usage: /stt [start|stop|send|file <path>|cancel|mode <name>|profile <name>|speakers [off|N]|realtime [start|stop|cancel|status]|status|doctor]",
           "error",
         );
         return;

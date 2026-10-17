@@ -86,13 +86,23 @@ export type AssemblyAiProviderConfig = SecretConfig & {
  speakers: number;
 };
 
+export type SonioxProviderConfig = SecretConfig & {
+  type: "soniox";
+  baseUrl: string;
+  model: string;
+  language: string;
+  timeoutSeconds: number;
+  pollIntervalMs: number;
+};
+
 export type ProviderConfig =
- | MistralProviderConfig
- | OpenAiCompatibleProviderConfig
- | DeepgramProviderConfig
- | ElevenLabsProviderConfig
- | GladiaProviderConfig
- | AssemblyAiProviderConfig;
+  | MistralProviderConfig
+  | OpenAiCompatibleProviderConfig
+  | DeepgramProviderConfig
+  | ElevenLabsProviderConfig
+  | GladiaProviderConfig
+  | AssemblyAiProviderConfig
+  | SonioxProviderConfig;
 
 export type OutputConfig = {
  appendTrailingSpace: boolean;

@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import {
   defaultAssemblyAiProviderConfig,
   defaultBridgeCaptureConfig,
-  defaultCaptureConfig,
   defaultCleanupConfig,
   defaultDeepgramProviderConfig,
   defaultFfmpegCaptureConfig,
@@ -12,6 +11,7 @@ import {
   defaultOpenAiCompatibleProviderConfig,
   defaultOutputConfig,
   defaultRealtimeConfig,
+  defaultSonioxProviderConfig,
   defaultVoiceCommandsConfig,
 } from "./defaults";
 import { secureEndpointFrom, secureWebSocketEndpointFrom } from "./endpoint";
@@ -29,6 +29,7 @@ import type {
   PluginConfig,
   ProviderConfig,
   RealtimeConfig,
+  SonioxProviderConfig,
   VoiceCommandsConfig,
 } from "./types";
 import { resolveApiKey } from "../secrets/resolve-api-key";
@@ -410,6 +411,18 @@ const assemblyAiProviderFrom = async (
   )),
 });
 
+const sonioxProviderFrom = async (
+  merged: Record<string, unknown>,
+  provider: Record<string, unknown>,
+): Promise<SonioxProviderConfig> => ({
+  type: "soniox",
+  baseUrl: secureEndpointFrom(provider.baseUrl ?? provider.base_url ?? merged.baseUrl, defaultSonioxProviderConfig.baseUrl),
+  model: textFrom(provider.model, textFrom(merged.model, defaultSonioxProviderConfig.model)),
+  language: textFrom(provider.language, textFrom(merged.language, defaultSonioxProviderConfig.language)),
+  pollIntervalMs: positiveIntegerFrom(provider.pollIntervalMs ?? merged.pollIntervalMs, defaultSonioxProviderConfig.pollIntervalMs),
+  ...(await commonProviderFields(merged, provider, defaultSonioxProviderConfig)),
+});
+
 const providerFrom = async (
   merged: Record<string, unknown>,
 ): Promise<ProviderConfig> => {
@@ -466,6 +479,8 @@ const providerFrom = async (
     return gladiaProviderFrom(merged, provider);
   if (providerType === "assemblyai" || providerType === "assembly-ai")
     return assemblyAiProviderFrom(merged, provider);
+
+  if (providerType === "soniox") return sonioxProviderFrom(merged, provider);
 
   throw new Error(`Unsupported STT provider: ${providerType}`);
 };

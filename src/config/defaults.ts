@@ -1,7 +1,6 @@
 import type {
   AssemblyAiProviderConfig,
   BridgeCaptureConfig,
-  CaptureConfig,
   CleanupConfig,
   DeepgramProviderConfig,
   FfmpegCaptureConfig,
@@ -11,6 +10,7 @@ import type {
   OpenAiCompatibleProviderConfig,
   OutputConfig,
   RealtimeConfig,
+  SonioxProviderConfig,
   VoiceCommandsConfig,
 } from "./types";
 
@@ -159,6 +159,20 @@ export const defaultRealtimeConfig = {
   keychainService: "",
   keychainAccount: "",
 } satisfies RealtimeConfig;
+
+export const defaultSonioxProviderConfig = {
+  type: "soniox",
+  baseUrl: "https://api.soniox.com",
+  model: "stt-async-v5",
+  language: "",
+  timeoutSeconds: 300,
+  pollIntervalMs: 1000,
+  apiKey: "",
+  apiKeyEnv: "SONIOX_API_KEY",
+  apiKeyFile: "",
+  keychainService: "",
+  keychainAccount: "",
+} satisfies SonioxProviderConfig;
 
 export const defaultOutputConfig = {
   appendTrailingSpace: true,
