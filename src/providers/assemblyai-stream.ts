@@ -3,7 +3,11 @@ import { formatError } from "../utils/text";
 import { normalizeLanguage, objectAt, textAt } from "./helpers";
 
 /** Node's WebSocket accepts an init object with headers; the DOM type does not. */
-type WebSocketWithInit = new (url: string, init?: { headers?: Record<string, string> }) => WebSocket;
+type WebSocketWithInit = new (
+  url: string,
+  init?: { headers?: Record<string, string> },
+) => WebSocket;
+// SAFETY: Node's WebSocket supports the headers init overload absent from DOM typings.
 const NodeWebSocket = WebSocket as unknown as WebSocketWithInit;
 
 const CONNECT_TIMEOUT_MS = 10_000;
@@ -17,7 +21,7 @@ const numberAt = (value: unknown, key: string): number => {
   return typeof child === "number" && Number.isFinite(child) ? child : 0;
 };
 
-const buildStreamUrl = (config: RealtimeConfig): string => {
+export const buildStreamUrl = (config: RealtimeConfig): string => {
   const params = new URLSearchParams({
     sample_rate: String(config.capture.sampleRate),
     encoding: "pcm_s16le",
@@ -25,7 +29,8 @@ const buildStreamUrl = (config: RealtimeConfig): string => {
   });
   if (config.mode) params.set("mode", config.mode);
   if (config.formatTurns) params.set("format_turns", "true");
-  if (config.inactivitySeconds > 0) params.set("inactivity_timeout", String(config.inactivitySeconds));
+  if (config.inactivitySeconds > 0)
+    params.set("inactivity_timeout", String(config.inactivitySeconds));
   // Both of these are JSON-encoded arrays on the wire, not repeated params:
   // the server rejects a bare value with "Invalid 'keyterms_prompt': Value
   // error, Invalid JSON array".
@@ -35,19 +40,27 @@ const buildStreamUrl = (config: RealtimeConfig): string => {
       .split(",")
       .map((entry) => entry.trim())
       .filter((entry) => entry.length > 0);
-    if (languages.length > 0) params.set("language_codes", JSON.stringify(languages));
+    if (languages.length > 0)
+      params.set("language_codes", JSON.stringify(languages));
   }
-  if (config.keyterms.length > 0) params.set("keyterms_prompt", JSON.stringify(config.keyterms));
+  if (config.keyterms.length > 0)
+    params.set("keyterms_prompt", JSON.stringify(config.keyterms));
+  if (config.speakers > 0) {
+    params.set("speaker_labels", "true");
+    params.set("max_speakers", String(config.speakers));
+  }
   return `${config.endpoint}?${params.toString()}`;
 };
 
 export type RealtimeStreamEvents = {
   onReady?(info: { id: string; model: string; mode: string }): void;
   onSpeechStarted?(): void;
-  onPartial?(text: string): void;
-  onFinal?(text: string): void;
+  onPartial?(text: string, turnOrder?: number, stableText?: string): void;
+  onFinal?(text: string, turnOrder?: number, speaker?: string): void;
   onError?(error: Error): void;
-  onClosed?(info: { audioSeconds: number; sessionSeconds: number } | null): void;
+  onClosed?(
+    info: { audioSeconds: number; sessionSeconds: number } | null,
+  ): void;
 };
 
 export type RealtimeStream = {
@@ -83,17 +96,23 @@ export const openAssemblyAiStream = (
   }
   if (signal?.aborted) throw new Error("Realtime session was cancelled.");
 
-  const socket = new NodeWebSocket(buildStreamUrl(config), { headers: { Authorization: config.apiKey } });
+  const socket = new NodeWebSocket(buildStreamUrl(config), {
+    headers: { Authorization: config.apiKey },
+  });
   let closedByUs = false;
   let droppedChunks = 0;
-  let termination: { audioSeconds: number; sessionSeconds: number } | null = null;
+  let closing: Promise<void> | undefined;
+  let termination: { audioSeconds: number; sessionSeconds: number } | null =
+    null;
 
   const sendJson = (payload: Record<string, unknown>): void => {
     if (socket.readyState !== 1) return; // WebSocket.OPEN
     try {
       socket.send(JSON.stringify(payload));
     } catch (error) {
-      events.onError?.(new Error(`AssemblyAI stream send failed: ${formatError(error)}`));
+      events.onError?.(
+        new Error(`AssemblyAI stream send failed: ${formatError(error)}`),
+      );
     }
   };
 
@@ -110,40 +129,40 @@ export const openAssemblyAiStream = (
       try {
         socket.send(new Uint8Array(chunk));
       } catch (error) {
-        events.onError?.(new Error(`AssemblyAI audio send failed: ${formatError(error)}`));
+        events.onError?.(
+          new Error(`AssemblyAI audio send failed: ${formatError(error)}`),
+        );
       }
     },
     forceEndpoint() {
       sendJson({ type: "ForceEndpoint" });
     },
     close() {
+      if (closing) return closing;
       closedByUs = true;
-      sendJson({ type: "Terminate" });
-      return new Promise<void>((resolve) => {
+      closing = new Promise<void>((resolve, reject) => {
+        const finish = () => {
+          clearTimeout(timer);
+          if (termination) resolve();
+          else reject(new Error("AssemblyAI socket closed without a Termination acknowledgment; session duration is unknown."));
+        };
+        const timer = setTimeout(() => {
+          socket.removeEventListener("close", finish);
+          stream.abort();
+          reject(new Error("AssemblyAI shutdown timed out: socket closure was not confirmed."));
+        }, CLOSE_TIMEOUT_MS);
         if (socket.readyState === 3) {
-          resolve();
+          finish();
           return;
         }
-        const timer = setTimeout(() => {
-          try {
-            socket.close();
-          } catch {
-            /* already closing */
-          }
-          resolve();
-        }, CLOSE_TIMEOUT_MS);
-        socket.addEventListener(
-          "close",
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
+        socket.addEventListener("close", finish, { once: true });
+        sendJson({ type: "Terminate" });
       });
+      return closing;
     },
     abort() {
       closedByUs = true;
+      sendJson({ type: "Terminate" });
       try {
         socket.close();
       } catch {
@@ -165,6 +184,7 @@ export const openAssemblyAiStream = (
       if (!settled) {
         settled = true;
         clearTimeout(connectTimer);
+        stream.abort();
         reject(error);
         return;
       }
@@ -207,10 +227,36 @@ export const openAssemblyAiStream = (
         case "Turn": {
           const transcript = textAt(payload, "transcript");
           if (!transcript) return;
-          if (payload && typeof payload === "object" && (payload as Record<string, unknown>).end_of_turn === true) {
-            events.onFinal?.(transcript);
+          if (
+            payload &&
+            typeof payload === "object" &&
+            (payload as Record<string, unknown>).end_of_turn === true
+          ) {
+            events.onFinal?.(
+              transcript,
+              numberAt(payload, "turn_order"),
+              textAt(payload, "speaker_label"),
+            );
           } else {
-            events.onPartial?.(transcript);
+            const rawWords = (payload as Record<string, unknown>).words;
+            const stable: string[] = [];
+            if (Array.isArray(rawWords)) {
+              for (const word of rawWords) {
+                if (
+                  !word ||
+                  typeof word !== "object" ||
+                  word.word_is_final !== true
+                )
+                  break;
+                const text = textAt(word, "text");
+                if (text) stable.push(text);
+              }
+            }
+            events.onPartial?.(
+              transcript,
+              numberAt(payload, "turn_order"),
+              stable.join(" "),
+            );
           }
           return;
         }
@@ -219,6 +265,7 @@ export const openAssemblyAiStream = (
             audioSeconds: numberAt(payload, "audio_duration_seconds"),
             sessionSeconds: numberAt(payload, "session_duration_seconds"),
           };
+          if (closedByUs) socket.close();
           return;
         case "Error":
           fail(
@@ -233,7 +280,11 @@ export const openAssemblyAiStream = (
     });
 
     socket.addEventListener("error", () => {
-      fail(new Error("AssemblyAI stream connection failed. Check the API key and network."));
+      fail(
+        new Error(
+          "AssemblyAI stream connection failed. Check the API key and network.",
+        ),
+      );
     });
 
     socket.addEventListener("close", (event) => {
@@ -251,7 +302,9 @@ export const openAssemblyAiStream = (
       events.onClosed?.(termination);
       if (!closedByUs && event.code !== 1000) {
         events.onError?.(
-          new Error(`AssemblyAI stream closed unexpectedly (${event.code}${event.reason ? ` ${event.reason}` : ""}).`),
+          new Error(
+            `AssemblyAI stream closed unexpectedly (${event.code}${event.reason ? ` ${event.reason}` : ""}).`,
+          ),
         );
       }
     });

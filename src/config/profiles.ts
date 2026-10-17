@@ -77,12 +77,28 @@ export const readProfileState = async (configPath: string): Promise<string> => {
  * Persist the active profile name atomically (temp file + rename). No-op when
  * there is no config path. Throws when the state file cannot be written.
  */
-export const writeProfileState = async (configPath: string, profile: string): Promise<void> => {
+export const writeProfileState = (configPath: string, profile: string): Promise<void> =>
+  writeState(configPath, { profile });
+
+/** Persisted `/stt speakers` choice; undefined when never set. */
+export const readSpeakersState = async (configPath: string): Promise<number | undefined> => {
+  const statePath = profileStatePath(configPath);
+  if (!statePath) return undefined;
+  const value = (await readStateFile(statePath)).speakers;
+  return typeof value === "number" ? value : undefined;
+};
+
+export const writeSpeakersState = (configPath: string, speakers: number): Promise<void> =>
+  writeState(configPath, { speakers });
+
+/** Merge keys into the sidecar state file atomically (temp file + rename). */
+const writeState = async (configPath: string, patch: Record<string, unknown>): Promise<void> => {
   const statePath = profileStatePath(configPath);
   if (!statePath) return;
   const resolved = resolvePath(statePath);
+  const current = await readStateFile(statePath).catch(() => ({}));
   const tempPath = `${resolved}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(tempPath, `${JSON.stringify({ profile }, null, 2)}\n`, "utf8");
+  await writeFile(tempPath, `${JSON.stringify({ ...current, ...patch }, null, 2)}\n`, "utf8");
   try {
     await rename(tempPath, resolved);
   } catch (error) {

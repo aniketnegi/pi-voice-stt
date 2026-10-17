@@ -14,9 +14,14 @@ import type {
   VoiceCommandsConfig,
 } from "./types";
 
-const platformCaptureDefaults = (): Pick<FfmpegCaptureConfig, "inputFormat" | "input"> => {
-  if (process.platform === "darwin") return { inputFormat: "avfoundation", input: ":0" };
-  if (process.platform === "win32") return { inputFormat: "dshow", input: "audio=Microphone" };
+const platformCaptureDefaults = (): Pick<
+  FfmpegCaptureConfig,
+  "inputFormat" | "input"
+> => {
+  if (process.platform === "darwin")
+    return { inputFormat: "avfoundation", input: ":0" };
+  if (process.platform === "win32")
+    return { inputFormat: "dshow", input: "audio=Microphone" };
   return { inputFormat: "pulse", input: "default" };
 };
 
@@ -125,6 +130,7 @@ export const defaultAssemblyAiProviderConfig = {
   apiKeyFile: "",
   keychainService: "",
   keychainAccount: "",
+  speakers: 0,
 } satisfies AssemblyAiProviderConfig;
 
 export const defaultRealtimeConfig = {
@@ -138,6 +144,8 @@ export const defaultRealtimeConfig = {
   keyterms: [],
   inactivitySeconds: 0,
   commitOnTurnEnd: true,
+  speakers: 0,
+  insertionPosition: "cursor",
   capture: {
     ffmpegPath: "ffmpeg",
     ...platformCaptureDefaults(),

@@ -1,110 +1,112 @@
 export type FfmpegCaptureConfig = {
-  type: "ffmpeg";
-  ffmpegPath: string;
-  inputFormat: string;
-  input: string;
-  sampleRate: number;
-  channels: number;
-  maxSeconds: number;
-  minBytes: number;
+ type: "ffmpeg";
+ ffmpegPath: string;
+ inputFormat: string;
+ input: string;
+ sampleRate: number;
+ channels: number;
+ maxSeconds: number;
+ minBytes: number;
 };
 
 export type BridgeCaptureConfig = {
-  type: "bridge";
-  endpoint: string;
-  token: string;
-  tokenEnv: string;
-  tokenFile: string;
-  requestTimeoutSeconds: number;
-  maxSeconds: number;
-  minBytes: number;
+ type: "bridge";
+ endpoint: string;
+ token: string;
+ tokenEnv: string;
+ tokenFile: string;
+ requestTimeoutSeconds: number;
+ maxSeconds: number;
+ minBytes: number;
 };
 
 export type CaptureConfig = FfmpegCaptureConfig | BridgeCaptureConfig;
 
 export type SecretConfig = {
-  apiKey: string;
-  apiKeyEnv: string;
-  apiKeyFile: string;
-  keychainService: string;
-  keychainAccount: string;
+ apiKey: string;
+ apiKeyEnv: string;
+ apiKeyFile: string;
+ keychainService: string;
+ keychainAccount: string;
 };
 
 export type MistralProviderConfig = SecretConfig & {
-  type: "mistral";
-  endpoint: string;
-  model: string;
-  language: string;
-  timeoutSeconds: number;
+ type: "mistral";
+ endpoint: string;
+ model: string;
+ language: string;
+ timeoutSeconds: number;
 };
 
 export type OpenAiCompatibleProviderConfig = SecretConfig & {
-  type: "openai-compatible";
-  endpoint: string;
-  model: string;
-  language: string;
-  timeoutSeconds: number;
-  responseFormat: "json";
+ type: "openai-compatible";
+ endpoint: string;
+ model: string;
+ language: string;
+ timeoutSeconds: number;
+ responseFormat: "json";
 };
 
 export type DeepgramProviderConfig = SecretConfig & {
-  type: "deepgram";
-  endpoint: string;
-  model: string;
-  language: string;
-  timeoutSeconds: number;
-  smartFormat: boolean;
+ type: "deepgram";
+ endpoint: string;
+ model: string;
+ language: string;
+ timeoutSeconds: number;
+ smartFormat: boolean;
 };
 
 export type ElevenLabsProviderConfig = SecretConfig & {
-  type: "elevenlabs";
-  endpoint: string;
-  model: string;
-  language: string;
-  timeoutSeconds: number;
+ type: "elevenlabs";
+ endpoint: string;
+ model: string;
+ language: string;
+ timeoutSeconds: number;
 };
 
 export type GladiaProviderConfig = SecretConfig & {
-  type: "gladia";
-  uploadEndpoint: string;
-  transcriptionEndpoint: string;
-  model: string;
-  language: string;
-  timeoutSeconds: number;
-  pollIntervalMs: number;
+ type: "gladia";
+ uploadEndpoint: string;
+ transcriptionEndpoint: string;
+ model: string;
+ language: string;
+ timeoutSeconds: number;
+ pollIntervalMs: number;
 };
 
 export type AssemblyAiProviderConfig = SecretConfig & {
-  type: "assemblyai";
-  uploadEndpoint: string;
-  transcriptEndpoint: string;
-  model: string;
-  language: string;
-  timeoutSeconds: number;
-  pollIntervalMs: number;
+ type: "assemblyai";
+ uploadEndpoint: string;
+ transcriptEndpoint: string;
+ model: string;
+ language: string;
+ timeoutSeconds: number;
+ pollIntervalMs: number;
+ /** Max speakers to label (diarization). 0 = off. Top-level `speakers` key. */
+ speakers: number;
 };
 
 export type ProviderConfig =
-  | MistralProviderConfig
-  | OpenAiCompatibleProviderConfig
-  | DeepgramProviderConfig
-  | ElevenLabsProviderConfig
-  | GladiaProviderConfig
-  | AssemblyAiProviderConfig;
+ | MistralProviderConfig
+ | OpenAiCompatibleProviderConfig
+ | DeepgramProviderConfig
+ | ElevenLabsProviderConfig
+ | GladiaProviderConfig
+ | AssemblyAiProviderConfig;
 
 export type OutputConfig = {
-  appendTrailingSpace: boolean;
-  /**
-   * When true, stopping a recording with the toggle shortcut (Ctrl+R) also
-   * sends the transcript straight to chat instead of only inserting it into
-   * the prompt. Mirrors the Enter-while-recording behavior.
-   */
-  submitOnStop: boolean;
-  /**
-   * Literal dictionary applied to the raw transcript (before cleanup), e.g.
-   * { "super base": "Supabase" }. Case-insensitive, word-boundary aware.
-   */
-  replacements: Record<string, string>;
+ appendTrailingSpace: boolean;
+ /**
+  * When true, stopping a recording with the toggle shortcut (Ctrl+R) also
+  * sends the transcript straight to chat instead of only inserting it into
+  * the prompt. Mirrors the Enter-while-recording behavior.
+  */
+ submitOnStop: boolean;
+ /**
+  * Literal dictionary applied to the raw transcript (before cleanup), e.g.
+  * { "super base": "Supabase" }. Case-insensitive, word-boundary aware.
+  */
+ replacements: Record<string, string>;
 };
 
 /**
@@ -115,19 +117,19 @@ export type OutputConfig = {
  * providers.
  */
 export type CleanupConfig = SecretConfig & {
-  enabled: boolean;
-  endpoint: string;
-  model: string;
-  /** Target language for the cleaned text: "auto" keeps the spoken language. */
-  language: string;
-  /** Base system prompt; language, glossary and repo context are appended. */
-  prompt: string;
-  /** Glossary of project-specific terms the model should spell correctly. */
-  projectTerms: string[];
-  /** When true, include light git context (current branch) in the prompt. */
-  useRepoContext: boolean;
-  maxTokens: number;
-  timeoutSeconds: number;
+ enabled: boolean;
+ endpoint: string;
+ model: string;
+ /** Target language for the cleaned text: "auto" keeps the spoken language. */
+ language: string;
+ /** Base system prompt; language, glossary and repo context are appended. */
+ prompt: string;
+ /** Glossary of project-specific terms the model should spell correctly. */
+ projectTerms: string[];
+ /** When true, include light git context (current branch) in the prompt. */
+ useRepoContext: boolean;
+ maxTokens: number;
+ timeoutSeconds: number;
 };
 
 /**
@@ -138,13 +140,13 @@ export type CleanupConfig = SecretConfig & {
  * test the streaming path without a live microphone).
  */
 export type RealtimeCaptureConfig = {
-  ffmpegPath: string;
-  inputFormat: string;
-  input: string;
-  sampleRate: number;
-  /** Audio frame size sent to the streaming API. The API accepts 50-1000ms. */
-  chunkMs: number;
-  realtimeInput: boolean;
+ ffmpegPath: string;
+ inputFormat: string;
+ input: string;
+ sampleRate: number;
+ /** Audio frame size sent to the streaming API. The API accepts 50-1000ms. */
+ chunkMs: number;
+ realtimeInput: boolean;
 };
 
 /**
@@ -157,27 +159,30 @@ export type RealtimeCaptureConfig = {
  * `language_codes`.
  */
 export type RealtimeConfig = SecretConfig & {
-  enabled: boolean;
-  keybind: string;
-  endpoint: string;
-  model: string;
-  mode: string;
-  formatTurns: boolean;
-  language: string;
-  keyterms: string[];
-  /** Seconds of inactivity before the server closes the session. 0 disables. */
-  inactivitySeconds: number;
-  commitOnTurnEnd: boolean;
-  capture: RealtimeCaptureConfig;
+ enabled: boolean;
+ keybind: string;
+ endpoint: string;
+ model: string;
+ mode: string;
+ formatTurns: boolean;
+ language: string;
+ keyterms: string[];
+ /** Seconds of inactivity before the server closes the session. 0 disables. */
+ inactivitySeconds: number;
+ commitOnTurnEnd: boolean;
+ /** Max speakers to label (diarization). 0 = off. Top-level `speakers` key. */
+ speakers: number;
+ insertionPosition: "cursor" | "end";
+ capture: RealtimeCaptureConfig;
 };
 
 export type PluginConfig = {
-  capture: CaptureConfig;
-  provider: ProviderConfig;
-  output: OutputConfig;
-  cleanup: CleanupConfig;
-  commands: VoiceCommandsConfig;
-  realtime: RealtimeConfig;
+ capture: CaptureConfig;
+ provider: ProviderConfig;
+ output: OutputConfig;
+ cleanup: CleanupConfig;
+ commands: VoiceCommandsConfig;
+ realtime: RealtimeConfig;
 };
 
 /**
@@ -185,10 +190,10 @@ export type PluginConfig = {
  * Keys map a command to the list of phrases that trigger it.
  */
 export type VoiceCommandsConfig = {
-  enabled: boolean;
-  send: string[];
-  clear: string[];
-  newline: string[];
+ enabled: boolean;
+ send: string[];
+ clear: string[];
+ newline: string[];
 };
 
 /**
@@ -199,11 +204,11 @@ export type VoiceCommandsConfig = {
  * last selection is reused as the default for every session.
  */
 export type ProfilesConfig = {
-  profiles: Record<string, Record<string, unknown>>;
-  profile: string;
+ profiles: Record<string, Record<string, unknown>>;
+ profile: string;
 };
 
 /** Persisted last-selection state, stored as <configPath>.profile.json. */
 export type ProfileState = {
-  profile: string;
+ profile: string;
 };

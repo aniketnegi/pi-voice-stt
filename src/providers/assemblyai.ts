@@ -26,6 +26,21 @@ export const buildSpeechModels = (model: string): string[] => {
   return [...new Set(withFallback)];
 };
 
+/**
+ * Turn diarized utterances into `Speaker A: …` lines. Returns "" when there is
+ * nothing to label or only one speaker was heard, so the caller keeps the
+ * plain `text` (no label noise when only you talked).
+ */
+export const formatUtterances = (payload: unknown): string => {
+  const raw = (payload as Record<string, unknown> | null)?.utterances;
+  if (!Array.isArray(raw)) return "";
+  const lines = raw
+    .map((entry) => ({ speaker: textAt(entry, "speaker"), text: textAt(entry, "text") }))
+    .filter((entry) => entry.text);
+  if (new Set(lines.map((entry) => entry.speaker)).size < 2) return "";
+  return lines.map((entry) => `Speaker ${entry.speaker || "?"}: ${entry.text}`).join("\n");
+};
+
 const authHeaders = (apiKey: string): Record<string, string> => ({
   Accept: "application/json",
   Authorization: apiKey,
@@ -92,6 +107,10 @@ export const createAssemblyAiProvider = (config: AssemblyAiProviderConfig): SttP
     };
     if (language) body.language_code = language;
     else if (requestedLanguage.toLowerCase() === "auto") body.language_detection = true;
+    if (config.speakers > 0) {
+      body.speaker_labels = true;
+      body.speaker_options = { min_speakers_expected: 1, max_speakers_expected: config.speakers };
+    }
 
     const transcriptPayload = await fetchJson(
       config.transcriptEndpoint,
@@ -114,6 +133,6 @@ export const createAssemblyAiProvider = (config: AssemblyAiProviderConfig): SttP
     const resultPayload = await waitForTranscript(id, config, input.signal);
     const text = textAt(resultPayload, "text");
     if (!text) throw new Error("AssemblyAI transcription response did not include text.");
-    return { text };
+    return { text: (config.speakers > 0 && formatUtterances(resultPayload)) || text };
   },
 });
