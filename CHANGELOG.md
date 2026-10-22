@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- AssemblyAI now sends the plural `speech_models` array instead of the deprecated
+  singular `speech_model`, which the API rejects with HTTP 400 for current
+  model names. (#22, @rickmorby)
+
 ## [0.8.0] - 2026-09-23
 
 ### Added
