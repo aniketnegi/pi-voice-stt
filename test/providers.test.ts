@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { basename } from "node:path";
 import { defaultAssemblyAiProviderConfig, defaultDeepgramProviderConfig, defaultElevenLabsProviderConfig, defaultGladiaProviderConfig, defaultMistralProviderConfig, defaultOpenAiCompatibleProviderConfig } from "../src/config/defaults";
 import { createProvider } from "../src/providers/factory";
+import { buildSpeechModels } from "../src/providers/assemblyai";
 import { audioFixture } from "./helpers";
 
 const configs = [defaultMistralProviderConfig, defaultOpenAiCompatibleProviderConfig, defaultElevenLabsProviderConfig,
@@ -36,7 +37,7 @@ for (const config of configs) {
         if (config.type === "assemblyai") {
           if (init.method === "POST") {
             const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-            assert.deepEqual(body.speech_models, [config.model]);
+            assert.deepEqual(body.speech_models, buildSpeechModels(config.model));
             assert.equal(body.speech_model, undefined);
             return Response.json({ id: "test" });
           }

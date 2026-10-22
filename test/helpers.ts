@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
-import { defaultCaptureConfig, defaultCleanupConfig, defaultMistralProviderConfig, defaultOutputConfig, defaultVoiceCommandsConfig } from "../src/config/defaults";
+import { defaultCaptureConfig, defaultCleanupConfig, defaultMistralProviderConfig, defaultOutputConfig, defaultRealtimeConfig, defaultVoiceCommandsConfig } from "../src/config/defaults";
 import type { PluginConfig } from "../src/config/types";
 
 export const testConfig = (): PluginConfig => ({
@@ -10,6 +10,7 @@ export const testConfig = (): PluginConfig => ({
   provider: { ...defaultMistralProviderConfig, apiKey: "test-key", language: "fr" },
   output: { ...defaultOutputConfig, replacements: { "super base": "Supabase" } },
   cleanup: { ...defaultCleanupConfig },
+  realtime: { ...defaultRealtimeConfig, capture: { ...defaultRealtimeConfig.capture } },
   commands: { ...defaultVoiceCommandsConfig, enabled: true, clear: ["clear"] },
 });
 

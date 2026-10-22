@@ -8,7 +8,14 @@ import { formatError } from "../utils/text";
 import { transcribeAudioPath, type TranscriptionServices } from "./transcribe";
 import { formatTranscriptForPrompt } from "./output";
 
-export type DictationMode = "idle" | "recording" | "processing" | "polishing";
+export type DictationMode =
+  | "idle"
+  | "recording"
+  | "processing"
+  | "polishing"
+  | "connecting"
+  | "streaming"
+  | "stopping";
 
 export type DictationToast = {
   variant?: "info" | "success" | "warning" | "error";

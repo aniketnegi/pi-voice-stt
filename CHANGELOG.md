@@ -7,11 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Realtime streaming dictation over AssemblyAI's v3 websocket (`Ctrl+Shift+R`):
+  a live preview, stable-word insertion at the cursor or prompt end, a raw-PCM
+  `ffmpeg` capture path, and `/stt realtime [start|stop|cancel|status]`.
+  (#23, @cairodavila)
+- Optional AssemblyAI speaker labels for recorded/file transcription and realtime
+  sessions, with a persisted `/stt speakers [off|N]` selection.
+  (#23, @cairodavila)
+
 ### Fixed
 
 - AssemblyAI now sends the plural `speech_models` array instead of the deprecated
-  singular `speech_model`, which the API rejects with HTTP 400 for current
-  model names. (#22, @rickmorby)
+  singular `speech_model`, which rejects current model names such as
+  `universal-3-5-pro` with HTTP 400. The legacy `universal` alias maps to
+  `universal-2`, and a single configured model gets `universal-2` appended as the
+  fallback tier. (#22, @rickmorby; #23, @cairodavila)
+- AssemblyAI `language: "auto"` now sends `language_detection` instead of
+  silently falling back to the server default (`en_us`). (#23, @cairodavila)
+- The raw Kitty CSI-u fallback for `ctrl+shift+<letter>` keybinds matched
+  modifier `5` (plain ctrl) instead of `6` (ctrl+shift), so it never fired for the
+  combo it was written for. `pi-tui` parses the sequence correctly, so the
+  fallback is now only a raw-stream safety net. (#23, @cairodavila)
 
 ## [0.8.0] - 2026-09-23
 

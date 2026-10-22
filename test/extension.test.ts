@@ -4,13 +4,14 @@ import { writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import extension from "../src/index";
-import { audioFixture } from "./helpers";
+import { audioFixture, deferred } from "./helpers";
 
 test("Pi registers and executes the audio tool and file command with active profiles and modes", async (t) => {
   const { cwd, path } = await audioFixture(t, "My  meeting.m4a");
   const configPath = join(cwd, "stt.json");
   await writeFile(configPath, JSON.stringify({
     provider: { type: "mistral", apiKey: "test-key" },
+    realtime: { enabled: true, apiKey: "test-key" },
     output: { replacements: { "super base": "Supabase" }, submitOnStop: true },
     commands: { enabled: true, send: ["send"], clear: ["clear"], newline: ["new line"] },
     profiles: { local: {
@@ -19,7 +20,7 @@ test("Pi registers and executes the audio tool and file command with active prof
     } },
   }));
   // Honor the persisted profile even when a tool runs before session_start.
-  await writeFile(`${configPath}.profile.json`, JSON.stringify({ profile: "local" }));
+  await writeFile(`${configPath}.profile.json`, JSON.stringify({ profile: "local", speakers: 3 }));
   for (const [key, value] of Object.entries({ PI_STT_CONFIG: configPath, PI_STT_MODE: "default", PI_STT_PROFILE: "", PI_STT_LOCALE: "en" })) {
     const previous = process.env[key];
     process.env[key] = value;
@@ -53,6 +54,8 @@ test("Pi registers and executes the audio tool and file command with active prof
   let lastModel = "";
   let expectedFilename = "My  meeting.m4a";
   let expectedMime = "audio/mp4";
+  let providerResponse: Promise<Response> | undefined;
+  let providerStarted: (() => void) | undefined;
   t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
     if (url.endsWith("/chat/completions")) {
       cleanupCalls++;
@@ -68,6 +71,8 @@ test("Pi registers and executes the audio tool and file command with active prof
     assert.equal(file.type, expectedMime);
     lastModel = String(init.body.get("model"));
     if (lastModel === "test-model") assert.equal(init.body.get("language"), "fr");
+    providerStarted?.();
+    if (providerResponse) return providerResponse;
     return Response.json({ text: transcript });
   });
 
@@ -84,6 +89,8 @@ test("Pi registers and executes the audio tool and file command with active prof
   assert.equal(editor, "Existing prompt. ");
   assert.equal(cleanupCalls, 1);
   assert.deepEqual(await readdir(cwd), initialFiles);
+  await command.handler("status", ctx);
+  assert.match(notifications.at(-1)!, /speakers up to 3/);
 
   await command.handler("mode raw", ctx);
   for (const keyword of ["send", "clear", "new line"]) {
@@ -111,6 +118,34 @@ test("Pi registers and executes the audio tool and file command with active prof
   await command.handler("profile default", ctx);
   await tool.execute("call-2", { path }, undefined, undefined, { ...ctx, hasUI: false });
   assert.notEqual(lastModel, "test-model");
+
+  const started = deferred<void>();
+  const response = deferred<Response>();
+  providerStarted = () => started.resolve();
+  providerResponse = response.promise;
+  const pendingFile = tool.execute("busy", { path }, undefined, undefined, ctx);
+  try {
+    await started.promise;
+    await command.handler("realtime start", ctx);
+    assert.match(notifications.at(-1)!, /busy/);
+  } finally {
+    response.resolve(Response.json({ text: "meeting" }));
+    await pendingFile;
+    providerStarted = undefined;
+    providerResponse = undefined;
+  }
+
+  const callsBeforeRealtime = providerCalls;
+  const startingRealtime = command.handler("realtime start", ctx);
+  try {
+    await assert.rejects(tool.execute("realtime-busy", { path }, undefined, undefined, ctx), /realtime session is active/);
+    await command.handler(`file "${path}"`, ctx);
+    assert.match(notifications.at(-1)!, /realtime session is active/);
+    assert.equal(providerCalls, callsBeforeRealtime);
+  } finally {
+    await command.handler("realtime cancel", ctx);
+    await startingRealtime;
+  }
 
   editor = "Do not change";
   failProvider = true;

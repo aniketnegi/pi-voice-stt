@@ -1,20 +1,21 @@
 /**
- * Raw-key helpers for the profile menu shortcut.
+ * Raw-key helper for ctrl+shift+<letter> shortcuts.
  *
- * pi-tui's key parser decodes Kitty CSI-u modifier values with an off-by-one
- * (`modValue - 1`), so a real `ctrl+shift+r` (Kitty modifier 5, `\x1b[114;5u`)
- * is misread as plain `ctrl+r`. That makes `ctrl+shift+<letter>` impossible to
- * match through the normal key pipeline. As a workaround the extension matches
- * the raw terminal sequence itself for `ctrl+shift+<letter>` keybinds, which
- * works on terminals that forward the Kitty keyboard protocol (iTerm2, WezTerm,
- * kitty; inside tmux it needs `set -s extended-keys on`).
+ * Kitty encodes a key as CSI `codepoint:shifted-codepoint; modifiers:event-type u`,
+ * where modifiers is `1 + bitmask(shift=1, alt=2, ctrl=4, super=8)`. ctrl+shift
+ * is therefore modifier 6 (`1 + 1 + 4`), and the plain semicolon form is
+ * `\x1b[114;6u`. pi-tui's parser handles that correctly, so this raw matcher is
+ * a fallback for terminals that forward the protocol but still need the keybind
+ * matched from the raw terminal stream (inside tmux this needs
+ * `set -s extended-keys on`).
  */
 
 /**
- * Build a regex that matches the raw Kitty CSI-u encoding of
- * `ctrl+shift+<letter>` (modifier 5, semicolon form). Returns undefined when
- * the keybind is not a ctrl+shift+letter combo (those work through the normal
- * parser, e.g. `alt+r`).
+ * Build a regex matching the raw Kitty CSI-u encoding of
+ * `ctrl+shift+<letter>`. Accepts the alternate-key group
+ * (`\x1b[114:82;6u`, sent when the terminal reports shifted key variants) and
+ * the event-type suffix (`\x1b[114;6:1u`). Returns undefined when the keybind
+ * is not a ctrl+shift+letter combo.
  */
 export const kittyCtrlShiftLetterRegex = (keybind: string): RegExp | undefined => {
   const parts = keybind.toLowerCase().split("+");
@@ -23,5 +24,5 @@ export const kittyCtrlShiftLetterRegex = (keybind: string): RegExp | undefined =
   if (!letter) return undefined;
   const lower = letter.charCodeAt(0);
   const upper = lower - 32;
-  return new RegExp(`^\\x1b\\[(?:${lower}|${upper});5(?::\\d+)?u$`);
+  return new RegExp(`^\\x1b\\[(?:${lower}|${upper})(?::\\d+)?;6(?::\\d+)?u$`);
 };

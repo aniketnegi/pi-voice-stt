@@ -1,7 +1,6 @@
 import type {
   AssemblyAiProviderConfig,
   BridgeCaptureConfig,
-  CaptureConfig,
   CleanupConfig,
   DeepgramProviderConfig,
   FfmpegCaptureConfig,
@@ -10,13 +9,19 @@ import type {
   MistralProviderConfig,
   OpenAiCompatibleProviderConfig,
   OutputConfig,
+  RealtimeConfig,
   SonioxProviderConfig,
   VoiceCommandsConfig,
 } from "./types";
 
-const platformCaptureDefaults = (): Pick<FfmpegCaptureConfig, "inputFormat" | "input"> => {
-  if (process.platform === "darwin") return { inputFormat: "avfoundation", input: ":0" };
-  if (process.platform === "win32") return { inputFormat: "dshow", input: "audio=Microphone" };
+const platformCaptureDefaults = (): Pick<
+  FfmpegCaptureConfig,
+  "inputFormat" | "input"
+> => {
+  if (process.platform === "darwin")
+    return { inputFormat: "avfoundation", input: ":0" };
+  if (process.platform === "win32")
+    return { inputFormat: "dshow", input: "audio=Microphone" };
   return { inputFormat: "pulse", input: "default" };
 };
 
@@ -125,7 +130,35 @@ export const defaultAssemblyAiProviderConfig = {
   apiKeyFile: "",
   keychainService: "",
   keychainAccount: "",
+  speakers: 0,
 } satisfies AssemblyAiProviderConfig;
+
+export const defaultRealtimeConfig = {
+  enabled: false,
+  keybind: "ctrl+shift+r",
+  endpoint: "wss://streaming.assemblyai.com/v3/ws",
+  model: "universal-3-5-pro",
+  mode: "balanced",
+  formatTurns: true,
+  language: "auto",
+  keyterms: [],
+  inactivitySeconds: 0,
+  commitOnTurnEnd: true,
+  speakers: 0,
+  insertionPosition: "cursor",
+  capture: {
+    ffmpegPath: "ffmpeg",
+    ...platformCaptureDefaults(),
+    sampleRate: 16000,
+    chunkMs: 100,
+    realtimeInput: false,
+  },
+  apiKey: "",
+  apiKeyEnv: "ASSEMBLYAI_API_KEY",
+  apiKeyFile: "",
+  keychainService: "",
+  keychainAccount: "",
+} satisfies RealtimeConfig;
 
 export const defaultSonioxProviderConfig = {
   type: "soniox",
