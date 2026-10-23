@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Command-prefixed `apiKey` values (`!command`) to retrieve secrets on demand from password managers (such as `pass`, `op`, `bw`) with process-lifetime caching.
+
 ## [0.9.0] - 2026-10-22
 
 ### Added
