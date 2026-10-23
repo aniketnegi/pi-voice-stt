@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Command-prefixed `apiKey` values (`!command`) to retrieve secrets on demand from password managers (such as `pass`, `op`, `bw`) with process-lifetime caching.
+- Command-prefixed `apiKey` values (`!command`) to retrieve secrets on demand
+  from password managers (such as `pass`, `op`, `bw`) with process-lifetime
+  caching, matching the `!command` convention of Pi's core configuration.
+  (#24, @aniketnegi)
 
 ## [0.9.0] - 2026-10-22
 
