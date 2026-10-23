@@ -76,6 +76,22 @@ test("loadConfig supports API key files", async () => {
   }
 });
 
+test("loadConfig supports command-prefixed API keys", async () => {
+  await withConfig({ provider: { type: "groq", apiKey: "!node -e \"process.stdout.write('cmd-secret')\"" } }, async (configPath) => {
+    const config = await loadConfig({ configPath });
+    assert.equal(config.provider.apiKey, "cmd-secret");
+  });
+});
+
+test("loadConfig throws when API key command fails", async () => {
+  await withConfig({ provider: { type: "groq", apiKey: "!node -e \"process.exit(1)\"" } }, async (configPath) => {
+    await assert.rejects(
+      async () => loadConfig({ configPath }),
+      /Failed to resolve API key from command/,
+    );
+  });
+});
+
 test("loadConfig supports Groq convenience provider", async () => {
   await withConfig({ provider: { type: "groq", apiKey: "test", language: "fr" } }, async (configPath) => {
     const config = await loadConfig({ configPath });

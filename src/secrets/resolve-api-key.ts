@@ -1,8 +1,36 @@
+import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { textFrom } from "../utils/coerce";
 import { resolvePath } from "../utils/path";
 import { formatError } from "../utils/text";
 import { readKeychainSecret } from "./keychain";
+
+const execAsync = promisify(exec);
+const commandResultCache = new Map<string, string>();
+
+const executeSecretCommand = async (commandWithBang: string): Promise<string> => {
+  const cached = commandResultCache.get(commandWithBang);
+  if (cached !== undefined) return cached;
+
+  const command = commandWithBang.slice(1).trim();
+  if (!command) throw new Error("API key command must not be empty after '!'");
+
+  try {
+    const { stdout } = await execAsync(command, {
+      encoding: "utf8",
+      timeout: 15_000,
+      windowsHide: true,
+    });
+    const result = stdout.trim();
+    if (result) {
+      commandResultCache.set(commandWithBang, result);
+    }
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to resolve API key from command "${command}": ${formatError(error)}`);
+  }
+};
 
 const unquote = (value: string): string => {
   const trimmed = value.trim();
@@ -43,7 +71,12 @@ const readApiKeyFile = async (filePath: string, envName: string): Promise<string
 
 export const resolveApiKey = async (input: Record<string, unknown>, defaultEnv: string): Promise<string> => {
   const explicitKey = textFrom(input.apiKey);
-  if (explicitKey) return explicitKey;
+  if (explicitKey) {
+    if (explicitKey.startsWith("!")) {
+      return executeSecretCommand(explicitKey);
+    }
+    return explicitKey;
+  }
 
   const apiKeyEnv = typeof input.apiKeyEnv === "string" ? input.apiKeyEnv.trim() : defaultEnv;
   const envKey = apiKeyEnv ? textFrom(process.env[apiKeyEnv]) : "";

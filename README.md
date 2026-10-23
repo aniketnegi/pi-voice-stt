@@ -653,6 +653,19 @@ The extension calls:
 security find-generic-password -w -s <service> -a <account>
 ```
 
+You can also retrieve keys from a secret manager (such as `pass`, 1Password CLI, or Bitwarden) by prefixing `apiKey` with `!`:
+
+```json
+{
+  "provider": {
+    "type": "groq",
+    "apiKey": "!pass show api/groq"
+  }
+}
+```
+
+Pi Voice STT executes the command on demand when transcription starts and caches the output in memory for the process lifetime.
+
 ## Development
 
 ```bash
